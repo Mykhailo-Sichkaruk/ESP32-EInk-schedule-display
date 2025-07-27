@@ -1,17 +1,14 @@
 {
-  description = "Shell for ESP32 EInk development";
+  description = "ESP‑IDF dev shell (nix‑ld + espup)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.05";
-    rust-overlay = {
-      url = "github:oxalica/rust-overlay";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
+    flake-utils.url = "github:numtide/flake-utils";
+    rust-overlay.url = "github:oxalica/rust-overlay";
   };
 
   outputs =
     {
-      self,
       nixpkgs,
       flake-utils,
       rust-overlay,
@@ -22,43 +19,42 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ (import rust-overlay) ];
+          config.allowUnfree = true;
+          overlays = [ rust-overlay.overlays.default ];
         };
+
       in
       {
         devShells.default = pkgs.mkShell {
-          name = "esp32-shell-basic";
-          buildInputs = [
-            pkgs.cargo-espflash
+          name = "esp‑idf‑shell";
+          NIX_LD = pkgs.lib.fileContents "${pkgs.stdenv.cc}/nix-support/dynamic-linker";
+          NIX_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+            pkgs.glibc
+            pkgs.gcc.libc
+            pkgs.zlib
+          ];
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+            pkgs.stdenv.cc.cc.lib
+            pkgs.libxml2
           ];
 
-          packages = with pkgs; [
-            espup
-            esp-generate
+          nativeBuildInputs = with pkgs; [
             rustup
+            espup
             cargo
-            nix-ld
-            cargo-binutils
-            vscode
+            cargo-binutils 
+            python3
+            cmake
+            ninja 
+            ldproxy
           ];
 
           shellHook = ''
-            export NIX_LD=${pkgs.glibc}/lib/ld-linux-x86-64.so.2
-            if [ ! -d "$HOME/.rustup/toolchains/esp" ]; then
-              echo "🔧 installing esp toolchain"
-              rustup toolchain install stable --component rust-src --target riscv32imc-unknown-none-elf
-              rustup toolchain install nightly
-              rustup component add rust-src --toolchain nightly
-              espup install -e -d x86_64-unknown-linux-gnu 
-              espup update
-            else
-              echo "🔧 esp toolchain already installed"
-            fi
-            echo "🔧 build with   : cargo +esp build --target esp32 --release"
-            echo "🚀 flash device : cargo espflash /dev/ttyUSB0 --release"
-            source $HOME/export-esp.sh
-            exec fish
+            espup install -t esp32 -e -d x86_64-unknown-linux-gnu
+
+            . ~/export-esp.sh
           '';
+
         };
       }
     );
