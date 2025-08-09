@@ -4,7 +4,19 @@ CONFIG_ESP_MAIN_TASK_STACK_SIZE=8000
 # Use this to set FreeRTOS kernel tick frequency to 1000 Hz (100 Hz by default).
 # This allows to use 1 ms granularity for thread sleeps (10 ms by default).
 #CONFIG_FREERTOS_HZ=1000
+#
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
 
 # Workaround for https://github.com/espressif/esp-idf/issues/7631
 #CONFIG_MBEDTLS_CERTIFICATE_BUNDLE=n
 #CONFIG_MBEDTLS_CERTIFICATE_BUNDLE_DEFAULT_FULL=n
+
+CONFIG_ESP_TASK_WDT=n
+CONFIG_ESP_TASK_WDT_INIT=n
+
+# Disable buffered logs — write directly to UART
+CONFIG_LOG_BUFFERED=n
+CONFIG_LOG_DEFAULT_LEVEL_INFO=y  # or _DEBUG if you want more
+# CONFIG_LOG_COLORS=n              # optional, remove ANSI escapes
+CONFIG_LOG_TIMESTAMP_SOURCE_SYSTEM=n

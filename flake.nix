@@ -34,6 +34,7 @@
             espup
             ldproxy
             rust-analyzer
+            espflash
           ];
 
           shellHook = ''
