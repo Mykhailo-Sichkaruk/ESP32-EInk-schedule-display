@@ -25,6 +25,16 @@ experimental = ["esp-idf-svc/experimental"]
 [dependencies]
 log = "0.4"
 esp-idf-svc = "0.51"
+esp-idf-hal    = "0.45.2"
+embedded-graphics = "0.8.1"
+epd-waveshare = "0.6.0"
+esp-backtrace = { version = "0.14.2", features = ["esp32", "println"] }
+esp-println = { version = "0.12.0", features = ["auto"] }
+anyhow = "1.0.98"
+esp-idf-sys = "0.36.1"
+embedded-svc = "0.28.1"
+embedded-hal-bus = "0.2.0"
+measurements = "0.11.0"
 
 # --- Optional Embassy Integration ---
 # esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
