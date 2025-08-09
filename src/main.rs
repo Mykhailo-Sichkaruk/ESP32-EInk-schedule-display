@@ -4,10 +4,10 @@ use embedded_graphics::prelude::Size;
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::PrimitiveStyleBuilder;
 use embedded_graphics::primitives::Rectangle;
-// use epd_waveshare::color::Color;
-use epd_waveshare::color::TriColor;
-use epd_waveshare::epd7in5b_v3::Display7in5;
-use epd_waveshare::epd7in5b_v3::Epd7in5;
+use epd_waveshare::color::Color;
+// use epd_waveshare::color::TriColor;
+use epd_waveshare::epd7in5_v2::Display7in5;
+use epd_waveshare::epd7in5_v2::Epd7in5;
 use epd_waveshare::prelude::WaveshareDisplay;
 use esp_idf_hal::delay::Delay;
 use esp_idf_hal::gpio;
@@ -117,7 +117,7 @@ fn main() -> anyhow::Result<()> {
     std::thread::sleep(std::time::Duration::from_millis(1000));
 
     // {
-    //     let this = display.clear(TriColor::Black);
+    //     let this = display.clear(Color::White);
     //     match this {
     //         Ok(t) => t,
     //         Err(e) => {
