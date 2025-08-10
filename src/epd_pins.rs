@@ -1,9 +1,10 @@
 use esp_idf_hal::{
-    gpio::{AnyInputPin, AnyOutputPin},
-    peripherals::Peripherals,
-    spi::SPI3,
+    gpio::{AnyInputPin, AnyOutputPin}, modem::Modem, peripherals::Peripherals, spi::SPI3
 };
 use log::info;
+use esp_idf_svc::{eventloop::EspSystemEventLoop};
+
+use crate::epd::epd_start_render_text;
 
 pub struct EpdHardwarePins {
     pub spi: SPI3,
@@ -16,10 +17,16 @@ pub struct EpdHardwarePins {
     pub pwr: AnyOutputPin,
 }
 
+pub struct NetParts {
+    pub modem: Modem,
+    pub sysloop: EspSystemEventLoop,
+}
 /// Retrieves the hardware pins for the EPD display.
-pub fn get_pins() -> anyhow::Result<EpdHardwarePins> {
+pub fn get_pins() -> anyhow::Result<(EpdHardwarePins, NetParts)> {
     let peripherals = Peripherals::take()?;
 
+    let modem = peripherals.modem;
+    let sysloop = EspSystemEventLoop::take()?;
     let sclk: AnyOutputPin = peripherals.pins.gpio18.into();
     let cs: AnyOutputPin = peripherals.pins.gpio5.into();
     let busy_in: AnyInputPin = peripherals.pins.gpio4.into();
@@ -41,7 +48,7 @@ pub fn get_pins() -> anyhow::Result<EpdHardwarePins> {
         )
     };
 
-    Ok(EpdHardwarePins {
+    let epd = EpdHardwarePins {
         spi: peripherals.spi3,
         sclk,
         mosi,
@@ -50,5 +57,11 @@ pub fn get_pins() -> anyhow::Result<EpdHardwarePins> {
         rst,
         dc,
         pwr,
-    })
+    };
+    let net_parts = NetParts {
+        modem,
+        sysloop,
+    };
+
+    Ok((epd, net_parts))
 }
