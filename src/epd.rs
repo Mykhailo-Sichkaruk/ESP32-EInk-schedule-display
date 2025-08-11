@@ -1,6 +1,5 @@
 use embedded_graphics::mono_font::ascii::FONT_10X20;
 use embedded_graphics::mono_font::MonoTextStyleBuilder;
-use embedded_graphics::mono_font::{ascii::FONT_10X20, MonoTextStyleBuilder};
 use embedded_graphics::prelude::Point;
 use embedded_graphics::prelude::*;
 use embedded_graphics::text::{LineHeight, Text};
@@ -71,18 +70,14 @@ pub fn epd_start_render_text(
         .clear(UnifiedColor::White.to_color())
         .expect("Failed to clear display buffer");
 
-    let text_style = MonoTextStyleBuilder::new()
+ let text_style = MonoTextStyleBuilder::new()
         .font(&FONT_10X20)
         .text_color(UnifiedColor::Chromatic.to_color())
         .build();
-    let bounds = Rectangle::new(Point::new(10, 20), Size::new(760, 440));
-    let tb_style = TextBoxStyleBuilder::new()
-        .alignment(HorizontalAlignment::Left) // Left/Center/Right/Justified
-        .line_height(LineHeight::Percent(110)) // tweak spacing
-        .build();
-    TextBox::with_textbox_style(&text, bounds, text_style, tb_style)
+
+    Text::new(&format!("{}", text), Point::new(10, 20), text_style)
         .draw(display.as_mut())
-        .expect("textbox draw");
+        .expect("Failed to draw text");
 
     epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)
         .expect("Failed to update and display EPD frame");
