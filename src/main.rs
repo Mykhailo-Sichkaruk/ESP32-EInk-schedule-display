@@ -2,7 +2,7 @@
 use epd_waveshare::epd2in9_v2::{Display2in9 as Display, Epd2in9 as Epd};
 
 use esp_backtrace as _;
-use esp_eink_schedule::epd::epd_start_render_text;
+use esp_eink_schedule::epd::{epd_start_render_bmp, epd_start_render_text};
 use esp_eink_schedule::epd_pins;
 use esp_eink_schedule::wifilib::getRequest;
 use esp_idf_hal::gpio::PinDriver;
@@ -21,11 +21,13 @@ fn main() -> anyhow::Result<()> {
 
     let (epd, net) = epd_pins::get_pins()?;
 
-    let res = getRequest(net, nvs)?;
-    epd_start_render_text(epd, res)?;
+    // let res = getRequest(net, nvs)?;
+    // epd_start_render_text(epd, res)?;
+    epd_start_render_bmp(epd)?;
 
-    unsafe {
-        esp_sleep_enable_ext0_wakeup(25, 1);
-        esp_deep_sleep(20_000_000);
-    }
+    // unsafe {
+    //     esp_sleep_enable_ext0_wakeup(25, 1);
+    //     esp_deep_sleep(20_000_000);
+    // }
+    Ok(())
 }
