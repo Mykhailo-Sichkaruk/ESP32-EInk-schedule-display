@@ -42,7 +42,7 @@ pub fn getRequest(NetParts { modem, sysloop }: NetParts, nvs: EspDefaultNvsParti
 
     let mut client = HttpClient::wrap(EspHttpConnection::new(&Default::default())?);
     let headers = [("accept", "application/json")];
-    let request = client.request(Method::Get, "http://10.175.59.221:8080", &headers)?;
+    let request = client.request(Method::Get, "http://google.com:80", &headers)?;
     let mut response = request.submit()?;
     let status = response.status();
     info!("Response status: {}", status);

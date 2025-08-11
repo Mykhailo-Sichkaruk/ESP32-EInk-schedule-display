@@ -5,7 +5,9 @@ use esp_backtrace as _;
 use esp_eink_schedule::epd::epd_start_render_text;
 use esp_eink_schedule::epd_pins;
 use esp_eink_schedule::wifilib::getRequest;
+use esp_idf_hal::gpio::PinDriver;
 use esp_idf_svc::nvs::{EspDefaultNvsPartition, EspNvs};
+use esp_idf_sys::{esp_deep_sleep, esp_sleep_enable_ext0_wakeup};
 // use esp_idf_sys::esp_deep_sleep;
 // use esp_idf_sys::esp_sleep_enable_ext0_wakeup;
 use log::info;
@@ -21,18 +23,9 @@ fn main() -> anyhow::Result<()> {
 
     let res = getRequest(net, nvs)?;
     epd_start_render_text(epd, res)?;
-    // info!("Configuring wakeup pin");
-    // let wakeup_pin =
-    //     PinDriver::input(peripherals.pins.gpio33).expect("Failed to create wakeup pin");
-    // unsafe {
-    //     esp_idf_sys::esp_sleep_enable_ext0_wakeup(wakeup_pin.pin(), 0);
-    // }
-    // info!("Wakeup pin configured");
-    // info!("Entering deep sleep");
-    // unsafe {
-    //     esp_sleep_enable_ext0_wakeup(25, 1);
-    //     esp_deep_sleep(20_000_000);
-    // }
 
-    Ok(())
+    unsafe {
+        esp_sleep_enable_ext0_wakeup(25, 1);
+        esp_deep_sleep(20_000_000);
+    }
 }
