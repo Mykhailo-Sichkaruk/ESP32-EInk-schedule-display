@@ -122,7 +122,7 @@ fn main() -> anyhow::Result<()> {
     ];
 
     ScheduleTable::new(
-        Point::new(0, battery_bar_height as i32), // Table starts at top-left of the display
+        Point::new(0, battery_bar_height as i32 + 20), // Table starts at top-left of the display
         Size::new(display_width, display_height - battery_bar_height), // Table occupies full display
         header_height,
         time_col_width,

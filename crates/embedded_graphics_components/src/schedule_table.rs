@@ -21,8 +21,8 @@ pub struct ScheduleTable<'a, F, C> {
     header_height: i32,
     time_col_width: i32,
     num_date_cols: i32,
-    num_data_rows: i32, // No longer fixed, determined by constructor
-    y_pos_offset: i32,
+    num_data_rows: i32,
+    y_pos_offset: i32, // FIXME: MAGIC
     nowline_time: f32,
     header_texts: [&'a str; 4],
     time_range: core::ops::RangeInclusive<u8>,

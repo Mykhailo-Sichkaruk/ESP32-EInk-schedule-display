@@ -9,7 +9,6 @@ use embedded_graphics_simulator::{
     BinaryColorTheme, OutputSettingsBuilder, SimulatorDisplay, Window,
 };
 
-// #[cfg(feature = "embedded-graphics-simulator")]
 fn main() -> anyhow::Result<()> {
     // Create a simulator display
     let mut display: SimulatorDisplay<Rgb565> = SimulatorDisplay::new(Size::new(480, 800));
@@ -39,7 +38,7 @@ fn main() -> anyhow::Result<()> {
     // For simplicity with given values, we'll keep num_data_rows = 12 as per original table height scaling.
     let num_data_rows = 12;
 
-    let battery_bar_height: u32 = 5; // Высота полосы батареи внизу
+    let battery_bar_height: u32 = 10; // Высота полосы батареи внизу
 
     let y_pos_offset = 10;
     let nowline_time = 13.5;
@@ -63,8 +62,8 @@ fn main() -> anyhow::Result<()> {
     ];
 
     ScheduleTable::new(
-        Point::new(0, 0),                         // Table starts at top-left of the display
-        Size::new(display_width, display_height), // Table occupies full display
+        Point::new(0, battery_bar_height as i32), // Table starts at top-left of the display
+        Size::new(display_width, display_height - battery_bar_height), // Table occupies full display
         header_height,
         time_col_width,
         num_date_cols,
@@ -84,11 +83,16 @@ fn main() -> anyhow::Result<()> {
 
     let battery_level_percent = 19;
 
-    // BatteryIndicator::new(
-    //     Point::new(0, 0),
-    //     Size::new(display_width, battery_bar_height),
-    // )
-    // .draw(&mut display, battery_level_percent)?;
+    BatteryIndicator::new(
+        Point::new(0, 0),
+        Size::new(display_width, battery_bar_height),
+        |color| match color {
+            UnifiedColor::Black => Rgb565::new(0, 0, 0),
+            UnifiedColor::White => Rgb565::new(255, 255, 255),
+            UnifiedColor::Chromatic => Rgb565::new(255, 0, 0),
+        },
+    )
+    .draw(&mut display, battery_level_percent)?;
 
     let output_settings = OutputSettingsBuilder::new().scale(2).build();
     Window::new("Hello World", &output_settings).show_static(&display);
