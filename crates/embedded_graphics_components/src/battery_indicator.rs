@@ -1,8 +1,10 @@
+use embedded_graphics::mono_font::ascii::FONT_4X6;
+use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder};
 use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::{PrimitiveStyleBuilder, Rectangle};
+use embedded_graphics::primitives::{Line, PrimitiveStyleBuilder, Rectangle};
+use embedded_graphics::text::Text;
 
-use crate::unified_color::{AnyColor, UnifiedColor};
-use esp_backtrace as _;
+use crate::unified_color::UnifiedColor;
 
 pub struct BatteryIndicator {
     top_left: Point,
@@ -15,9 +17,10 @@ impl BatteryIndicator {
         BatteryIndicator { top_left, size }
     }
 
-    pub fn draw<D>(&self, display: &mut D, battery_level_percent: u8) -> Result<(), D::Error>
+    pub fn draw<D, Color>(&self, display: &mut D, battery_level_percent: u8) -> Result<(), D::Error>
     where
-        D: DrawTarget<Color = AnyColor>,
+        D: DrawTarget<Color = Color>,
+        Color: PixelColor + std::convert::From<UnifiedColor>,
     {
         // 1. Рисуем фоновый белый прямоугольник (пустая часть батареи)
         // Это по сути стирает предыдущее состояние полосы перед отрисовкой нового.
@@ -47,7 +50,27 @@ impl BatteryIndicator {
                 .draw(display)?;
         }
 
-        // Текстовое значение процента удалено, так как "точность не важна" и данные уходят по Wi-Fi.
+        // display power text only if battery level is low
+        if battery_level_percent <= 20 {
+            let text_style_black: MonoTextStyle<Color> = MonoTextStyleBuilder::new()
+                .font(&FONT_4X6)
+                .text_color(UnifiedColor::Chromatic.into())
+                .build();
+
+            let text = format!("{battery_level_percent}%");
+
+            Text::new(
+                &text,
+                // draw after the filled part
+                self.top_left
+                    + Point::new(
+                        filled_width as i32 + 2,                       // 2 pixels padding
+                        FONT_4X6.character_size.height as i32 / 2 + 1, // Center vertically
+                    ),
+                text_style_black,
+            )
+            .draw(display)?;
+        }
 
         Ok(())
     }

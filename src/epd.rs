@@ -29,7 +29,7 @@ use log::info;
 use tinybmp::Bmp;
 
 use crate::epd_pins::EpdHardwarePins;
-use crate::unified_color::UnifiedColor;
+// use crate::unified_color::UnifiedColor;
 
 pub fn epd_start_render_text(
     EpdHardwarePins {
@@ -73,7 +73,7 @@ pub fn epd_start_render_text(
 
     epd.clear_frame(&mut spidd, &mut delay)?;
 
-    let mut display = Box::new(Display::default());
+    let display = Box::new(Display::default());
 
     epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)
         .expect("Failed to update and display EPD frame");
@@ -128,30 +128,30 @@ pub fn epd_start_render_bmp(
 
     let mut display = Box::new(Display::default());
 
-    display
-        .clear(UnifiedColor::White.into())
-        .expect("Failed to clear display buffer");
+    // display
+    //     .clear(UnifiedColor::White.into())
+    //     .expect("Failed to clear display buffer");
 
-    let bmp: Bmp<Rgb565> = Bmp::from_slice(include_bytes!("./assets/rust-pride.bmp")).unwrap();
+    // let bmp: Bmp<Rgb565> = Bmp::from_slice(include_bytes!("./assets/rust-pride.bmp")).unwrap();
 
-    display.draw_iter(bmp.pixels().map(|pixel| {
-        let point = pixel.0;
-        let color = pixel.1;
+    // display.draw_iter(bmp.pixels().map(|pixel| {
+    //     let point = pixel.0;
+    //     let color = pixel.1;
 
-        let new_color = UnifiedColor::from_rgb565(color).into();
+    //     let new_color = UnifiedColor::from_rgb565(color).into();
 
-        Pixel(point, new_color)
-    }))?;
+    //     Pixel(point, new_color)
+    // }))?;
 
-    // image.draw(display.as_mut()).expect("Failed to draw image");
+    // // image.draw(display.as_mut()).expect("Failed to draw image");
 
-    epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)
-        .expect("Failed to update and display EPD frame");
+    // epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)
+    //     .expect("Failed to update and display EPD frame");
 
-    info!("Frame updated and displayed");
+    // info!("Frame updated and displayed");
 
-    delay.delay_ms(1000);
-    epd.sleep(&mut spidd, &mut delay)
-        .expect("Failed to put EPD to sleep");
+    // delay.delay_ms(1000);
+    // epd.sleep(&mut spidd, &mut delay)
+    //     .expect("Failed to put EPD to sleep");
     Ok(())
 }

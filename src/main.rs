@@ -1,21 +1,31 @@
 use embedded_graphics::prelude::*;
 
+use embedded_graphics_components::unified_color::UnifiedColor;
+use epd_waveshare::color::TriColor;
 #[cfg(feature = "wokwi")]
 use epd_waveshare::epd2in9_v2::{Display2in9 as Display, Epd2in9 as Epd};
 #[cfg(not(feature = "wokwi"))]
 use epd_waveshare::epd7in5b_v3::{Display7in5 as Display, Epd7in5 as Epd};
 use epd_waveshare::prelude::WaveshareDisplay;
 
+use embedded_graphics_components::battery_indicator::BatteryIndicator;
+use embedded_graphics_components::schedule_table::ScheduleTable;
 use esp_backtrace as _;
-use esp_eink_schedule::battery_indicator::BatteryIndicator;
 use esp_eink_schedule::epd_pins::{self, EpdHardwarePins};
-use esp_eink_schedule::schedule_table::ScheduleTable;
 use esp_idf_hal::delay::Delay;
 use esp_idf_hal::gpio::{self, PinDriver};
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::spi;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use log::info;
+
+fn unif_color_converter(color: UnifiedColor) -> TriColor {
+    match color {
+        UnifiedColor::Black => TriColor::Black,
+        UnifiedColor::White => TriColor::White,
+        UnifiedColor::Chromatic => TriColor::Chromatic,
+    }
+}
 
 fn main() -> anyhow::Result<()> {
     esp_idf_sys::link_patches();
@@ -67,8 +77,8 @@ fn main() -> anyhow::Result<()> {
     display.set_rotation(epd_waveshare::prelude::DisplayRotation::Rotate90);
 
     // Get display dimensions for calculations
-    let display_width = display.bounding_box().size.width as i32;
-    let display_height = display.bounding_box().size.height as i32;
+    let display_width = display.bounding_box().size.width;
+    let display_height = display.bounding_box().size.height;
 
     // --- ScheduleTable parameters ---
     let header_height = 40;
@@ -88,7 +98,7 @@ fn main() -> anyhow::Result<()> {
     // For simplicity with given values, we'll keep num_data_rows = 12 as per original table height scaling.
     let num_data_rows = 12;
 
-    let battery_bar_height = 5; // Высота полосы батареи внизу
+    let battery_bar_height: u32 = 5; // Высота полосы батареи внизу
 
     let y_pos_offset = 10;
     let nowline_time = 13.5;
@@ -108,13 +118,12 @@ fn main() -> anyhow::Result<()> {
         ("03.01.2025", 15.0, 16.0, "xchaban"),
         ("01.01.2025", 17.0, 17.25, "xchaban"),
         ("02.01.2025", 17.0, 17.5, "xchaban"),
-        // ("03.01.2025", 17.0, 17.75, "xchaban"),
         ("03.01.2025", 17.0, 18.00, "xchaban"),
     ];
 
     ScheduleTable::new(
-        Point::new(0, 0), // Table starts at top-left of the display
-        Size::new(display_width as u32, display_height as u32), // Table occupies full display
+        Point::new(0, battery_bar_height as i32), // Table starts at top-left of the display
+        Size::new(display_width, display_height - battery_bar_height), // Table occupies full display
         header_height,
         time_col_width,
         num_date_cols,
@@ -124,17 +133,18 @@ fn main() -> anyhow::Result<()> {
         header_texts,
         time_range,
         time_intervals,
+        unif_color_converter,
     )
     .draw(display.as_mut())?;
 
-    let battery_level_percent = 75; // Example battery level
+    let battery_level_percent = 19; // Example battery level
 
-    // Draw battery indicator at the very bottom
-    BatteryIndicator::new(
-        Point::new(0, display_height - battery_bar_height),
-        Size::new(display_width as u32, battery_bar_height as u32),
-    )
-    .draw(display.as_mut(), battery_level_percent)?;
+    // // Draw battery indicator at the very bottom
+    // BatteryIndicator::new(
+    //     Point::new(0, 0),
+    //     Size::new(display_width, battery_bar_height),
+    // )
+    // .draw(display.as_mut(), battery_level_percent)?;
 
     epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)?;
 

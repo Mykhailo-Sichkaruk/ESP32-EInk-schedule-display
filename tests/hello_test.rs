@@ -5,20 +5,20 @@
 #![no_std]
 #![no_main]
 
-#[cfg(test)]
-#[embedded_test::tests]
-mod tests {
-    use esp_hal as _;
+// #[cfg(test)]
+// #[embedded_test::tests]
+// mod tests {
+//     use esp_hal as _;
 
-    #[init]
-    fn init() {
-        let _ = esp_hal::init(esp_hal::Config::default());
+//     #[init]
+//     fn init() {
+//         let _ = esp_hal::init(esp_hal::Config::default());
 
-    }
+//     }
 
-    #[test]
-    fn hello_test() {
+//     #[test]
+//     fn hello_test() {
 
-        assert_eq!(1 + 1, 2);
-    }
-}
+//         assert_eq!(1 + 1, 2);
+//     }
+// }

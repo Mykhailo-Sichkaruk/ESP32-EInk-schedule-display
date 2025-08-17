@@ -1,4 +1,6 @@
-use embedded_graphics::mono_font::ascii::{FONT_10X20, FONT_6X12};
+use std::marker::PhantomData;
+
+use embedded_graphics::mono_font::ascii::{FONT_6X12, FONT_10X20};
 use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder};
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{
@@ -6,10 +8,14 @@ use embedded_graphics::primitives::{
 };
 use embedded_graphics::text::Text;
 
-use crate::unified_color::{AnyColor, UnifiedColor};
-use esp_backtrace as _;
+use crate::unified_color::{IntoWith, UnifiedColor};
 
-pub struct ScheduleTable<'a> {
+const FONT_HEIGHT: i32 = FONT_10X20.character_size.height as i32;
+const FONT_WIDTH: i32 = FONT_10X20.character_size.width as i32;
+const SMALL_FONT_HEIGHT: i32 = FONT_6X12.character_size.height as i32;
+const SMALL_FONT_WIDTH: i32 = FONT_6X12.character_size.width as i32;
+
+pub struct ScheduleTable<'a, F, C> {
     top_left: Point,
     size: Size,
     header_height: i32,
@@ -21,9 +27,16 @@ pub struct ScheduleTable<'a> {
     header_texts: [&'a str; 4],
     time_range: core::ops::RangeInclusive<u8>,
     time_intervals: [(&'a str, f32, f32, &'a str); 12],
+
+    color_converter: F,             // Функция-конвертер
+    _phantom_color: PhantomData<C>, // Используем PhantomData для типа Color
 }
 
-impl<'a> ScheduleTable<'a> {
+impl<'a, F, C> ScheduleTable<'a, F, C>
+where
+    F: Fn(UnifiedColor) -> C + Copy, // F - это функция, которая берет UnifiedColor и возвращает C
+    C: PixelColor, // C - это тип цвета, который будет использоваться для отрисовки
+{
     #[allow(clippy::too_many_arguments)] // This many arguments are justified for a schedule table
     pub fn new(
         top_left: Point,
@@ -37,6 +50,9 @@ impl<'a> ScheduleTable<'a> {
         header_texts: [&'a str; 4],
         time_range: core::ops::RangeInclusive<u8>,
         time_intervals: [(&'a str, f32, f32, &'a str); 12],
+
+        //
+        color_converter: F,
     ) -> Self {
         ScheduleTable {
             top_left,
@@ -50,12 +66,15 @@ impl<'a> ScheduleTable<'a> {
             header_texts,
             time_range,
             time_intervals,
+            //
+            color_converter,
+            _phantom_color: PhantomData,
         }
     }
 
     pub fn draw<D>(&self, display: &mut D) -> Result<(), D::Error>
     where
-        D: DrawTarget<Color = AnyColor>,
+        D: DrawTarget<Color = C>,
     {
         let display_width = self.size.width as i32;
         let display_height = self.size.height as i32;
@@ -67,47 +86,41 @@ impl<'a> ScheduleTable<'a> {
         Rectangle::new(self.top_left, self.size)
             .into_styled(
                 PrimitiveStyleBuilder::new()
-                    .fill_color(UnifiedColor::White.into())
+                    .fill_color(UnifiedColor::White.into_with(self.color_converter))
                     .build(),
             )
             .draw(display)?;
 
-        let text_style_black: MonoTextStyle<AnyColor> = MonoTextStyleBuilder::new()
+        let text_style_black: MonoTextStyle<C> = MonoTextStyleBuilder::new()
             .font(&FONT_10X20)
-            .text_color(UnifiedColor::Black.into())
+            .text_color(UnifiedColor::Black.into_with(self.color_converter))
             .build();
 
-        let font_height = FONT_10X20.character_size.height as i32;
-        let font_width = FONT_10X20.character_size.width as i32;
-
-        let text_small_style_black: MonoTextStyle<AnyColor> = MonoTextStyleBuilder::new()
+        let text_small_style_black: MonoTextStyle<C> = MonoTextStyleBuilder::new()
             .font(&FONT_6X12)
-            .text_color(UnifiedColor::Black.into())
-            .background_color(UnifiedColor::White.into())
+            .text_color(UnifiedColor::Black.into_with(self.color_converter))
+            .background_color(UnifiedColor::White.into_with(self.color_converter))
             .build();
-
-        let small_font_height = FONT_6X12.character_size.height as i32;
-        let small_font_width = FONT_6X12.character_size.width as i32;
 
         let base_style = PrimitiveStyleBuilder::new()
-            .stroke_color(UnifiedColor::Black.into())
+            .stroke_color(UnifiedColor::Black.into_with(self.color_converter))
             .stroke_width(1)
             .build();
 
         let bold_line_style = PrimitiveStyleBuilder::new()
-            .stroke_color(UnifiedColor::Black.into())
+            .stroke_color(UnifiedColor::Black.into_with(self.color_converter))
             .stroke_width(2)
             .build();
 
         let now_line_style = PrimitiveStyleBuilder::new()
-            .stroke_color(UnifiedColor::Chromatic.into())
+            .stroke_color(UnifiedColor::Chromatic.into_with(self.color_converter))
             .stroke_width(4)
             .build();
 
         let interval_style = PrimitiveStyleBuilder::new()
-            .stroke_color(UnifiedColor::Black.into())
+            .stroke_color(UnifiedColor::Black.into_with(self.color_converter))
             .stroke_width(2)
-            .fill_color(UnifiedColor::White.into())
+            .fill_color(UnifiedColor::White.into_with(self.color_converter))
             .build();
 
         // Outer border (now relative to top_left of the table)
@@ -126,7 +139,7 @@ impl<'a> ScheduleTable<'a> {
         .into_styled(bold_line_style)
         .draw(display)?;
 
-        for i in 1..=self.num_data_rows {
+        for i in 1..self.num_data_rows {
             let y = self.top_left.y + self.header_height + i * row_height;
             // Only draw lines within the table's defined height
             if y < self.top_left.y + display_height {
@@ -173,10 +186,10 @@ impl<'a> ScheduleTable<'a> {
                 date_col_width
             };
 
-            let text_width = text.len() as i32 * font_width;
+            let text_width = text.len() as i32 * FONT_WIDTH;
             let x_pos = col_x + (col_width / 2) - (text_width / 2);
             let y_pos =
-                self.top_left.y + (self.header_height / 2) - (font_height / 2) + self.y_pos_offset;
+                self.top_left.y + (self.header_height / 2) - (FONT_HEIGHT / 2) + self.y_pos_offset;
 
             Text::new(text, Point::new(x_pos, y_pos), text_style_black).draw(display)?;
         }
@@ -186,9 +199,9 @@ impl<'a> ScheduleTable<'a> {
             let text = format!("{hour:02}:00");
             let row_y = self.top_left.y + self.header_height + i as i32 * row_height;
 
-            let text_width = text.len() as i32 * font_width;
+            let text_width = text.len() as i32 * FONT_WIDTH;
             let x_pos = self.top_left.x + (self.time_col_width / 2) - (text_width / 2);
-            let y_pos = row_y + (row_height / 2) + self.y_pos_offset - font_height;
+            let y_pos = row_y + (row_height / 2) + self.y_pos_offset - FONT_HEIGHT;
 
             // Only draw if within data rows (0-indexed to num_data_rows-1)
             if i < self.num_data_rows as usize {
@@ -231,26 +244,26 @@ impl<'a> ScheduleTable<'a> {
                 .draw(display)?;
 
                 if (end - start) >= 0.5 {
-                    let text_width_approx = text.len() as i32 * font_width;
+                    let text_width_approx = text.len() as i32 * FONT_WIDTH;
                     let text_x = col_x + (date_col_width / 2) - (text_width_approx / 2);
                     let text_y =
-                        start_y + (end_y - start_y) / 2 + self.y_pos_offset - (font_height / 3);
+                        start_y + (end_y - start_y) / 2 + self.y_pos_offset - (FONT_HEIGHT / 3);
 
                     Text::new(text, Point::new(text_x, text_y), text_style_black).draw(display)?;
                 }
 
-                let top_time_y = start_y + self.y_pos_offset - (small_font_height / 2);
-                let bottom_time_y = end_y + self.y_pos_offset - (small_font_height);
+                let top_time_y = start_y + self.y_pos_offset - (SMALL_FONT_HEIGHT / 2);
+                let bottom_time_y = end_y + self.y_pos_offset - (SMALL_FONT_HEIGHT);
 
                 let start_time_str =
                     format!("{:02}:{:02}", start as i32, (start * 60.0) as i32 % 60);
                 let end_time_str = format!("{:02}:{:02}", end as i32, (end * 60.0) as i32 % 60);
 
-                let start_time_x = col_x + (end_time_str.len() as i32 * small_font_width / 3);
+                let start_time_x = col_x + (end_time_str.len() as i32 * SMALL_FONT_WIDTH / 3);
 
                 let end_time_x = col_x
-                    + (date_col_width - (end_time_str.len() as i32 * small_font_width / 2))
-                    - (end_time_str.len() as i32 * small_font_width / 2)
+                    + (date_col_width - (end_time_str.len() as i32 * SMALL_FONT_WIDTH / 2))
+                    - (end_time_str.len() as i32 * SMALL_FONT_WIDTH / 2)
                     - 8;
 
                 Text::new(
