@@ -8,7 +8,7 @@ use embedded_graphics::primitives::{
 };
 use embedded_graphics::text::Text;
 
-use crate::unified_color::{IntoWith, UnifiedColor};
+use crate::unified_color::UnifiedColor;
 
 const FONT_HEIGHT: i32 = FONT_10X20.character_size.height as i32;
 const FONT_WIDTH: i32 = FONT_10X20.character_size.width as i32;
@@ -34,7 +34,7 @@ pub struct ScheduleTable<'a, F, C> {
 
 impl<'a, F, C> ScheduleTable<'a, F, C>
 where
-    F: Fn(UnifiedColor) -> C + Copy, // F - это функция, которая берет UnifiedColor и возвращает C
+    F: (Fn(UnifiedColor) -> C) + Copy, // F - это функция, которая берет UnifiedColor и возвращает C
     C: PixelColor, // C - это тип цвета, который будет использоваться для отрисовки
 {
     #[allow(clippy::too_many_arguments)] // This many arguments are justified for a schedule table
