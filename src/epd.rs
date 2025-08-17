@@ -1,12 +1,17 @@
 use embedded_graphics::image::Image;
 use embedded_graphics::mono_font::ascii::FONT_10X20;
-use embedded_graphics::mono_font::MonoTextStyleBuilder;
+use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder};
 use embedded_graphics::pixelcolor::Rgb565;
 use embedded_graphics::prelude::Point;
 use embedded_graphics::prelude::*;
+use embedded_graphics::primitives::Line;
 use embedded_graphics::text::{LineHeight, Text};
-use embedded_graphics::{prelude::*, primitives::Rectangle};
+use embedded_graphics::{
+    prelude::*,
+    primitives::{PrimitiveStyleBuilder, Rectangle},
+};
 use embedded_text::{alignment::HorizontalAlignment, style::TextBoxStyleBuilder, TextBox};
+use epd_waveshare::color::TriColor;
 #[cfg(feature = "wokwi")]
 use epd_waveshare::epd2in9_v2::{Display2in9 as Display, Epd2in9 as Epd};
 #[cfg(not(feature = "wokwi"))]
@@ -37,7 +42,8 @@ pub fn epd_start_render_text(
         dc,
         pwr,
     }: EpdHardwarePins,
-    text: String,
+    text: &str,
+    point: Point,
 ) -> anyhow::Result<()> {
     let mut pwr = PinDriver::output(pwr)?;
     pwr.set_high()?;
@@ -68,19 +74,6 @@ pub fn epd_start_render_text(
     epd.clear_frame(&mut spidd, &mut delay)?;
 
     let mut display = Box::new(Display::default());
-
-    display
-        .clear(UnifiedColor::White.to_color())
-        .expect("Failed to clear display buffer");
-
-    let text_style = MonoTextStyleBuilder::new()
-        .font(&FONT_10X20)
-        .text_color(UnifiedColor::Chromatic.to_color())
-        .build();
-
-    Text::new(&format!("{}", text), Point::new(10, 20), text_style)
-        .draw(display.as_mut())
-        .expect("Failed to draw text");
 
     epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)
         .expect("Failed to update and display EPD frame");
@@ -136,7 +129,7 @@ pub fn epd_start_render_bmp(
     let mut display = Box::new(Display::default());
 
     display
-        .clear(UnifiedColor::White.to_color())
+        .clear(UnifiedColor::White.into())
         .expect("Failed to clear display buffer");
 
     let bmp: Bmp<Rgb565> = Bmp::from_slice(include_bytes!("./assets/rust-pride.bmp")).unwrap();
@@ -145,7 +138,7 @@ pub fn epd_start_render_bmp(
         let point = pixel.0;
         let color = pixel.1;
 
-        let new_color = UnifiedColor::from_rgb565(color).to_color();
+        let new_color = UnifiedColor::from_rgb565(color).into();
 
         Pixel(point, new_color)
     }))?;

@@ -2,7 +2,7 @@
 use epd_waveshare::color::TriColor;
 
 #[cfg(feature = "wokwi")]
-use epd_waveshare::color::Color;
+use epd_waveshare::color::Color as BinColor;
 
 use embedded_graphics::pixelcolor::*;
 
@@ -11,23 +11,28 @@ pub enum UnifiedColor {
     White,
     Chromatic,
 }
+#[cfg(feature = "wokwi")]
+pub type AnyColor = BinColor;
+
+#[cfg(not(feature = "wokwi"))]
+pub type AnyColor = TriColor;
 
 impl UnifiedColor {
     #[cfg(feature = "wokwi")]
-    pub fn to_color(&self) -> Color {
+    fn to_color(&self) -> AnyColor {
         match self {
-            UnifiedColor::Black => Color::Black,
-            UnifiedColor::White => Color::White,
-            UnifiedColor::Chromatic => Color::Black,
+            UnifiedColor::Black => AnyColor::Black,
+            UnifiedColor::White => AnyColor::White,
+            UnifiedColor::Chromatic => AnyColor::Black,
         }
     }
 
     #[cfg(not(feature = "wokwi"))]
-    pub fn to_color(&self) -> TriColor {
+    fn to_color(&self) -> AnyColor {
         match self {
-            UnifiedColor::Black => TriColor::Black,
-            UnifiedColor::White => TriColor::White,
-            UnifiedColor::Chromatic => TriColor::Chromatic,
+            UnifiedColor::Black => AnyColor::Black,
+            UnifiedColor::White => AnyColor::White,
+            UnifiedColor::Chromatic => AnyColor::Chromatic,
         }
     }
 
@@ -45,5 +50,19 @@ impl UnifiedColor {
         } else {
             UnifiedColor::White
         }
+    }
+}
+
+#[cfg(feature = "wokwi")]
+impl Into<AnyColor> for UnifiedColor {
+    fn into(self) -> AnyColor {
+        self.to_color()
+    }
+}
+
+#[cfg(not(feature = "wokwi"))]
+impl From<UnifiedColor> for AnyColor {
+    fn from(val: UnifiedColor) -> Self {
+        val.to_color()
     }
 }
