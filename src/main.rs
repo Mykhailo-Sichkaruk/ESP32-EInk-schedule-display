@@ -1,6 +1,6 @@
 use embedded_graphics::prelude::*;
 
-use embedded_graphics_components::unified_color::UnifiedColor;
+use embedded_graphics_components::unified_color::{IntoPixelColorConverter, UnifiedColor};
 use epd_waveshare::color::TriColor;
 #[cfg(feature = "wokwi")]
 use epd_waveshare::epd2in9_v2::{Display2in9 as Display, Epd2in9 as Epd};
@@ -19,11 +19,17 @@ use esp_idf_hal::spi;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use log::info;
 
-fn unif_color_converter(color: UnifiedColor) -> TriColor {
-    match color {
-        UnifiedColor::Black => TriColor::Black,
-        UnifiedColor::White => TriColor::White,
-        UnifiedColor::Chromatic => TriColor::Chromatic,
+struct Converter;
+
+impl IntoPixelColorConverter for Converter {
+    type Output = TriColor;
+
+    fn convert(color: UnifiedColor) -> Self::Output {
+        match color {
+            UnifiedColor::Black => TriColor::Black,
+            UnifiedColor::White => TriColor::White,
+            UnifiedColor::Chromatic => TriColor::Chromatic,
+        }
     }
 }
 
@@ -121,7 +127,7 @@ fn main() -> anyhow::Result<()> {
         ("03.01.2025", 17.0, 18.00, "xchaban"),
     ];
 
-    ScheduleTable::new(
+    ScheduleTable::<Converter>::new(
         Point::new(0, battery_bar_height as i32 + 20), // Table starts at top-left of the display
         Size::new(display_width, display_height - battery_bar_height), // Table occupies full display
         header_height,
@@ -133,7 +139,6 @@ fn main() -> anyhow::Result<()> {
         header_texts,
         time_range,
         time_intervals,
-        unif_color_converter,
     )
     .draw(display.as_mut())?;
 

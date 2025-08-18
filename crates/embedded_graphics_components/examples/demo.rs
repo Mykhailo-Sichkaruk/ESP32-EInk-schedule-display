@@ -3,11 +3,25 @@ use embedded_graphics::{
     prelude::{Dimensions, Point, Size},
 };
 use embedded_graphics_components::{
-    battery_indicator::BatteryIndicator, schedule_table::ScheduleTable, unified_color::UnifiedColor,
+    battery_indicator::BatteryIndicator,
+    schedule_table::ScheduleTable,
+    unified_color::{IntoPixelColorConverter, UnifiedColor},
 };
-use embedded_graphics_simulator::{
-    BinaryColorTheme, OutputSettingsBuilder, SimulatorDisplay, Window,
-};
+use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
+
+struct Converter;
+
+impl IntoPixelColorConverter for Converter {
+    type Output = Rgb565;
+
+    fn convert(color: UnifiedColor) -> Self::Output {
+        match color {
+            UnifiedColor::Black => Rgb565::new(0, 0, 0),
+            UnifiedColor::White => Rgb565::new(255, 255, 255),
+            UnifiedColor::Chromatic => Rgb565::new(255, 0, 0),
+        }
+    }
+}
 
 fn main() -> anyhow::Result<()> {
     // Create a simulator display
@@ -61,7 +75,7 @@ fn main() -> anyhow::Result<()> {
         ("03.01.2025", 17.0, 18.00, "xchaban"),
     ];
 
-    ScheduleTable::new(
+    ScheduleTable::<Converter>::new(
         Point::new(0, battery_bar_height as i32), // Table starts at top-left of the display
         Size::new(display_width, display_height - battery_bar_height), // Table occupies full display
         header_height,
@@ -73,24 +87,14 @@ fn main() -> anyhow::Result<()> {
         header_texts,
         time_range,
         time_intervals,
-        |color| match color {
-            UnifiedColor::Black => Rgb565::new(0, 0, 0),
-            UnifiedColor::White => Rgb565::new(255, 255, 255),
-            UnifiedColor::Chromatic => Rgb565::new(255, 0, 0),
-        },
     )
     .draw(&mut display)?;
 
     let battery_level_percent = 19;
 
-    BatteryIndicator::new(
+    BatteryIndicator::<Converter>::new(
         Point::new(0, 0),
         Size::new(display_width, battery_bar_height),
-        |color| match color {
-            UnifiedColor::Black => Rgb565::new(0, 0, 0),
-            UnifiedColor::White => Rgb565::new(255, 255, 255),
-            UnifiedColor::Chromatic => Rgb565::new(255, 0, 0),
-        },
     )
     .draw(&mut display, battery_level_percent)?;
 

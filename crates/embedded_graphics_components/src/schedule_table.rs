@@ -8,14 +8,17 @@ use embedded_graphics::primitives::{
 };
 use embedded_graphics::text::Text;
 
-use crate::unified_color::UnifiedColor;
+use crate::unified_color::{IntoPixelColorConverter, UnifiedColor};
 
 const FONT_HEIGHT: i32 = FONT_10X20.character_size.height as i32;
 const FONT_WIDTH: i32 = FONT_10X20.character_size.width as i32;
 const SMALL_FONT_HEIGHT: i32 = FONT_6X12.character_size.height as i32;
 const SMALL_FONT_WIDTH: i32 = FONT_6X12.character_size.width as i32;
 
-pub struct ScheduleTable<'a, F, C> {
+pub struct ScheduleTable<'a, T>
+where
+    T: IntoPixelColorConverter,
+{
     top_left: Point,
     size: Size,
     header_height: i32,
@@ -28,14 +31,13 @@ pub struct ScheduleTable<'a, F, C> {
     time_range: core::ops::RangeInclusive<u8>,
     time_intervals: [(&'a str, f32, f32, &'a str); 12],
 
-    color_converter: F,             // Функция-конвертер
-    _phantom_color: PhantomData<C>, // Используем PhantomData для типа Color
+    _phantom_converter: PhantomData<T>, // Используем PhantomData для типа Color
 }
 
-impl<'a, F, C> ScheduleTable<'a, F, C>
+impl<'a, T> ScheduleTable<'a, T>
 where
-    F: (Fn(UnifiedColor) -> C) + Copy, // F - это функция, которая берет UnifiedColor и возвращает C
-    C: PixelColor, // C - это тип цвета, который будет использоваться для отрисовки
+    T: IntoPixelColorConverter,
+    T::Output: PixelColor,
 {
     #[allow(clippy::too_many_arguments)] // This many arguments are justified for a schedule table
     pub fn new(
@@ -50,9 +52,6 @@ where
         header_texts: [&'a str; 4],
         time_range: core::ops::RangeInclusive<u8>,
         time_intervals: [(&'a str, f32, f32, &'a str); 12],
-
-        //
-        color_converter: F,
     ) -> Self {
         ScheduleTable {
             top_left,
@@ -67,14 +66,13 @@ where
             time_range,
             time_intervals,
             //
-            color_converter,
-            _phantom_color: PhantomData,
+            _phantom_converter: PhantomData,
         }
     }
 
     pub fn draw<D>(&self, display: &mut D) -> Result<(), D::Error>
     where
-        D: DrawTarget<Color = C>,
+        D: DrawTarget<Color = T::Output>,
     {
         let display_width = self.size.width as i32;
         let display_height = self.size.height as i32;
@@ -86,41 +84,41 @@ where
         Rectangle::new(self.top_left, self.size)
             .into_styled(
                 PrimitiveStyleBuilder::new()
-                    .fill_color(UnifiedColor::White.into_with(self.color_converter))
+                    .fill_color(T::convert(UnifiedColor::White))
                     .build(),
             )
             .draw(display)?;
 
-        let text_style_black: MonoTextStyle<C> = MonoTextStyleBuilder::new()
+        let text_style_black: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
             .font(&FONT_10X20)
-            .text_color(UnifiedColor::Black.into_with(self.color_converter))
+            .text_color(T::convert(UnifiedColor::Black))
             .build();
 
-        let text_small_style_black: MonoTextStyle<C> = MonoTextStyleBuilder::new()
+        let text_small_style_black: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
             .font(&FONT_6X12)
-            .text_color(UnifiedColor::Black.into_with(self.color_converter))
-            .background_color(UnifiedColor::White.into_with(self.color_converter))
+            .text_color(T::convert(UnifiedColor::Black))
+            .background_color(T::convert(UnifiedColor::White))
             .build();
 
         let base_style = PrimitiveStyleBuilder::new()
-            .stroke_color(UnifiedColor::Black.into_with(self.color_converter))
+            .stroke_color(T::convert(UnifiedColor::Black))
             .stroke_width(1)
             .build();
 
         let bold_line_style = PrimitiveStyleBuilder::new()
-            .stroke_color(UnifiedColor::Black.into_with(self.color_converter))
+            .stroke_color(T::convert(UnifiedColor::Black))
             .stroke_width(2)
             .build();
 
         let now_line_style = PrimitiveStyleBuilder::new()
-            .stroke_color(UnifiedColor::Chromatic.into_with(self.color_converter))
+            .stroke_color(T::convert(UnifiedColor::Chromatic))
             .stroke_width(4)
             .build();
 
         let interval_style = PrimitiveStyleBuilder::new()
-            .stroke_color(UnifiedColor::Black.into_with(self.color_converter))
+            .stroke_color(T::convert(UnifiedColor::Black))
             .stroke_width(2)
-            .fill_color(UnifiedColor::White.into_with(self.color_converter))
+            .fill_color(T::convert(UnifiedColor::White))
             .build();
 
         // Outer border (now relative to top_left of the table)

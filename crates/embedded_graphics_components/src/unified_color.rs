@@ -7,12 +7,8 @@ pub enum UnifiedColor {
     Chromatic,
 }
 
-impl UnifiedColor {
-    pub fn into_with<F, C>(self, color_converter: F) -> C
-    where
-        F: Fn(UnifiedColor) -> C,
-        C: PixelColor,
-    {
-        color_converter(self)
-    }
+pub trait IntoPixelColorConverter {
+    type Output: PixelColor;
+
+    fn convert(color: UnifiedColor) -> Self::Output;
 }

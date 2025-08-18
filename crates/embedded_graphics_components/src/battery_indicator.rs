@@ -7,41 +7,41 @@ use embedded_graphics::primitives::{Line, PrimitiveStyleBuilder, Rectangle};
 use embedded_graphics::text::renderer::TextRenderer;
 use embedded_graphics::text::{Baseline, Text};
 
-use crate::unified_color::UnifiedColor;
+use crate::unified_color::{IntoPixelColorConverter, UnifiedColor};
 
-pub struct BatteryIndicator<F, C> {
+pub struct BatteryIndicator<T>
+where
+    T: IntoPixelColorConverter,
+    T::Output: PixelColor,
+{
     top_left: Point,
     size: Size,
-    // Функция-конвертер цвета
-    color_converter: F,
-    _phantom_color: PhantomData<C>,
+    _phantom_converter: PhantomData<T>,
 }
 
-impl<F, C> BatteryIndicator<F, C>
+impl<T> BatteryIndicator<T>
 where
-    F: (Fn(UnifiedColor) -> C) + Copy, // F - это функция,
-    C: PixelColor,
+    T: IntoPixelColorConverter,
+    T::Output: PixelColor,
 {
-    pub fn new(top_left: Point, size: Size, color_converter: F) -> Self {
-        // Убрал num_segments
+    pub fn new(top_left: Point, size: Size) -> Self {
         BatteryIndicator {
             top_left,
             size,
-            color_converter,
-            _phantom_color: PhantomData,
+            _phantom_converter: PhantomData,
         }
     }
 
     pub fn draw<D>(&self, display: &mut D, battery_level_percent: u8) -> Result<(), D::Error>
     where
-        D: DrawTarget<Color = C>,
+        D: DrawTarget<Color = T::Output>,
     {
         // 1. Рисуем фоновый белый прямоугольник (пустая часть батареи)
         // Это по сути стирает предыдущее состояние полосы перед отрисовкой нового.
         Rectangle::new(self.top_left, self.size)
             .into_styled(
                 PrimitiveStyleBuilder::new()
-                    .fill_color(UnifiedColor::White.into_with(self.color_converter))
+                    .fill_color(T::convert(UnifiedColor::White))
                     .build(),
             )
             .draw(display)?;
@@ -51,9 +51,9 @@ where
 
         // 3. Определяем цвет заполнения
         let fill_color = if battery_level_percent <= 20 {
-            UnifiedColor::Chromatic.into_with(self.color_converter) // Красный для низкого заряда
+            T::convert(UnifiedColor::Chromatic) // Красный для низкого заряда
         } else {
-            UnifiedColor::Black.into_with(self.color_converter) // Черный для нормального заряда
+            T::convert(UnifiedColor::Black) // Черный для нормального заряда
         };
 
         // 4. Рисуем заполненный прямоугольник
@@ -66,9 +66,9 @@ where
 
         // display power text only if battery level is low
         if battery_level_percent <= 20 {
-            let text_style_black: MonoTextStyle<C> = MonoTextStyleBuilder::new()
+            let text_style_black: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
                 .font(&FONT_6X10)
-                .text_color(UnifiedColor::Chromatic.into_with(self.color_converter))
+                .text_color(T::convert(UnifiedColor::Chromatic))
                 .build();
 
             let text = format!("{battery_level_percent}%");
