@@ -37,7 +37,6 @@ fn main() -> anyhow::Result<()> {
     // --- ScheduleTable parameters ---
     let header_height = 40;
     let time_col_width = 80;
-    let num_date_cols = 3;
     // Number of data rows: this now controls how many rows are allocated visually.
     // Ensure this value is chosen such that `(display_height - header_height)` is divisible by `num_data_rows`
     // to avoid rounding issues if you want perfect pixel alignment.
@@ -50,14 +49,13 @@ fn main() -> anyhow::Result<()> {
     // and accept potential rounding that `embedded-graphics` handles.
     // Or adjust range, or adjust header_height/total_height to make it divisible.
     // For simplicity with given values, we'll keep num_data_rows = 12 as per original table height scaling.
-    let num_data_rows = 12;
 
     let battery_bar_height: u32 = 10; // Высота полосы батареи внизу
 
     let y_pos_offset = 10;
     let nowline_time = 13.5;
 
-    let header_texts = ["Time", "01.01.2025", "02.01.2025", "03.01.2025"];
+    let header_texts = ["01.01.2025", "02.01.2025", "03.01.2025"];
     let time_range = 6..=17; // From 6:00 to 18:00, which is 13 hours/rows effectively
 
     let time_intervals = [
@@ -80,13 +78,11 @@ fn main() -> anyhow::Result<()> {
         Size::new(display_width, display_height - battery_bar_height), // Table occupies full display
         header_height,
         time_col_width,
-        num_date_cols,
-        num_data_rows, // Use dynamic row count
         y_pos_offset,
         nowline_time,
-        header_texts,
+        &header_texts,
         time_range,
-        time_intervals,
+        &time_intervals,
     )
     .draw(&mut display)?;
 

@@ -1,5 +1,6 @@
 use std::marker::PhantomData;
 
+use chrono::prelude::*;
 use embedded_graphics::mono_font::ascii::{FONT_6X12, FONT_10X20};
 use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder};
 use embedded_graphics::prelude::*;
@@ -15,6 +16,8 @@ const FONT_WIDTH: i32 = FONT_10X20.character_size.width as i32;
 const SMALL_FONT_HEIGHT: i32 = FONT_6X12.character_size.height as i32;
 const SMALL_FONT_WIDTH: i32 = FONT_6X12.character_size.width as i32;
 
+const TIME_ROW_HEADER: &str = "Time";
+
 pub struct ScheduleTable<'a, T>
 where
     T: IntoPixelColorConverter,
@@ -23,13 +26,11 @@ where
     size: Size,
     header_height: i32,
     time_col_width: i32,
-    num_date_cols: i32,
-    num_data_rows: i32,
     y_pos_offset: i32, // FIXME: MAGIC
-    nowline_time: f32,
-    header_texts: [&'a str; 4],
+    current_time: f32,
+    header_texts: &'a [&'a str],
     time_range: core::ops::RangeInclusive<u8>,
-    time_intervals: [(&'a str, f32, f32, &'a str); 12],
+    time_intervals: &'a [(&'a str, f32, f32, &'a str)],
 
     _phantom_converter: PhantomData<T>, // Используем PhantomData для типа Color
 }
@@ -45,23 +46,19 @@ where
         size: Size,
         header_height: i32,
         time_col_width: i32,
-        num_date_cols: i32,
-        num_data_rows: i32,
         y_pos_offset: i32,
         nowline_time: f32,
-        header_texts: [&'a str; 4],
+        header_texts: &'a [&'a str],
         time_range: core::ops::RangeInclusive<u8>,
-        time_intervals: [(&'a str, f32, f32, &'a str); 12],
+        time_intervals: &'a [(&'a str, f32, f32, &'a str)],
     ) -> Self {
         ScheduleTable {
             top_left,
             size,
             header_height,
             time_col_width,
-            num_date_cols,
-            num_data_rows,
             y_pos_offset,
-            nowline_time,
+            current_time: nowline_time,
             header_texts,
             time_range,
             time_intervals,
@@ -77,8 +74,8 @@ where
         let display_width = self.size.width as i32;
         let display_height = self.size.height as i32;
 
-        let date_col_width = (display_width - self.time_col_width) / self.num_date_cols;
-        let row_height = (display_height - self.header_height) / self.num_data_rows;
+        let date_col_width = (display_width - self.time_col_width) / self.header_texts.len() as i32;
+        let row_height = (display_height - self.header_height) / self.time_range.len() as i32;
 
         // Clear the area of the schedule table with white
         Rectangle::new(self.top_left, self.size)
@@ -137,7 +134,7 @@ where
         .into_styled(bold_line_style)
         .draw(display)?;
 
-        for i in 1..self.num_data_rows {
+        for i in 1..self.time_range.len() as i32 {
             let y = self.top_left.y + self.header_height + i * row_height;
             // Only draw lines within the table's defined height
             if y < self.top_left.y + display_height {
@@ -161,7 +158,7 @@ where
         .into_styled(base_style)
         .draw(display)?;
 
-        for i in 1..self.num_date_cols {
+        for i in 1..self.header_texts.len() as i32 {
             let x = self.top_left.x + self.time_col_width + i * date_col_width;
             Line::new(
                 Point::new(x, self.top_left.y),
@@ -172,7 +169,11 @@ where
         }
 
         // Header texts
-        for (i, &text) in self.header_texts.iter().enumerate() {
+        for (i, &text) in [TIME_ROW_HEADER]
+            .iter()
+            .chain(self.header_texts.iter())
+            .enumerate()
+        {
             let col_x = if i == 0 {
                 self.top_left.x
             } else {
@@ -202,7 +203,7 @@ where
             let y_pos = row_y + (row_height / 2) + self.y_pos_offset - FONT_HEIGHT;
 
             // Only draw if within data rows (0-indexed to num_data_rows-1)
-            if i < self.num_data_rows as usize {
+            if i < self.time_range.len() {
                 Text::new(&text, Point::new(x_pos, y_pos), text_style_black).draw(display)?;
             }
         }
@@ -211,7 +212,7 @@ where
         let radii = CornerRadiiBuilder::new().all(Size::new(10, 10)).build();
         let start_time_f32 = *self.time_range.start() as f32;
         for (date, start, end, text) in self.time_intervals {
-            let col_index = match date {
+            let col_index = match *date {
                 "01.01.2025" => 1,
                 "02.01.2025" => 2,
                 "03.01.2025" => 3,
@@ -254,8 +255,8 @@ where
                 let bottom_time_y = end_y + self.y_pos_offset - (SMALL_FONT_HEIGHT);
 
                 let start_time_str =
-                    format!("{:02}:{:02}", start as i32, (start * 60.0) as i32 % 60);
-                let end_time_str = format!("{:02}:{:02}", end as i32, (end * 60.0) as i32 % 60);
+                    format!("{:02}:{:02}", *start as i32, (*start * 60.0) as i32 % 60);
+                let end_time_str = format!("{:02}:{:02}", *end as i32, (*end * 60.0) as i32 % 60);
 
                 let start_time_x = col_x + (end_time_str.len() as i32 * SMALL_FONT_WIDTH / 3);
 
@@ -283,7 +284,7 @@ where
         // Current time line
         let now_line_y = (self.top_left.y as f32
             + self.header_height as f32
-            + (self.nowline_time - start_time_f32) * row_height as f32)
+            + (self.current_time - start_time_f32) * row_height as f32)
             as i32;
 
         let line_end_x = self.top_left.x + self.time_col_width + date_col_width; // Line extends across 2 date columns
