@@ -4,7 +4,7 @@ use embedded_graphics::{
 };
 use embedded_graphics_components::{
     battery_indicator::BatteryIndicator,
-    schedule_table::ScheduleTable,
+    schedule_table::{ScheduleTable, TimeInterval},
     unified_color::{IntoPixelColorConverter, UnifiedColor},
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
@@ -55,22 +55,114 @@ fn main() -> anyhow::Result<()> {
     let y_pos_offset = 10;
     let nowline_time = 13.5;
 
-    let header_texts = ["01.01.2025", "02.01.2025", "03.01.2025"];
-    let time_range = 6..=17; // From 6:00 to 18:00, which is 13 hours/rows effectively
+    let today = chrono::NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
+    let tomorrow = chrono::NaiveDate::from_ymd_opt(2025, 1, 2).unwrap();
+    let day_after_tomorrow = chrono::NaiveDate::from_ymd_opt(2025, 1, 3).unwrap();
+
+    let time_range =
+        chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap())
+            ..=chrono::NaiveDateTime::new(
+                day_after_tomorrow,
+                chrono::NaiveTime::from_hms_opt(17, 0, 0).unwrap(),
+            );
 
     let time_intervals = [
-        ("01.01.2025", 6.0, 12.25, "xsichkaruk"),
-        ("01.01.2025", 12.5, 14.0, "xchaban"),
-        ("01.01.2025", 14.5, 17.0, "xchaban"),
-        ("02.01.2025", 10.25, 10.75, "xchaban"),
-        ("02.01.2025", 11.5, 13.25, "xtodorov"),
-        ("02.01.2025", 13.5, 15.0, "xchaban"),
-        ("03.01.2025", 10.0, 12.0, "xchaban"),
-        ("03.01.2025", 12.25, 14.5, "xchaban"),
-        ("03.01.2025", 15.0, 16.0, "xchaban"),
-        ("01.01.2025", 17.0, 17.25, "xchaban"),
-        ("02.01.2025", 17.0, 17.5, "xchaban"),
-        ("03.01.2025", 17.0, 18.00, "xchaban"),
+        ("01.01.2025", 6.0, 12.25, "xsichkaruk"), // 6:00 to 12:15
+        ("01.01.2025", 12.5, 14.0, "xchaban"),    // 12:30 to 14:00
+        ("01.01.2025", 14.5, 17.0, "xchaban"),    // 14:30 to 17:00
+        ("02.01.2025", 10.25, 10.75, "xchaban"),  // 10:15 to 10:45
+        ("02.01.2025", 11.5, 13.25, "xtodorov"),  // 11:30 to 13:15
+        ("02.01.2025", 13.5, 15.0, "xchaban"),    // 13:30 to 15:00
+        ("03.01.2025", 10.0, 12.0, "xchaban"),    // 10:00 to 12:00
+        ("03.01.2025", 12.25, 14.5, "xchaban"),   // 12:15 to 14:30
+        ("03.01.2025", 15.0, 16.0, "xchaban"),    // 15:00 to 16:00
+        ("01.01.2025", 17.0, 17.25, "xchaban"),   // 17:00 to 17:15
+        ("02.01.2025", 17.0, 17.5, "xchaban"),    // 17:00 to 17:30
+        ("03.01.2025", 17.0, 18.00, "xchaban"),   // 17:00 to 18:00
+    ];
+
+    let time_intervals = vec![
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap()),
+            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(12, 15, 0).unwrap()),
+            "xsichkaruk",
+        ),
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(12, 30, 0).unwrap()),
+            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()),
+            "xchaban",
+        ),
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(10, 15, 0).unwrap(),
+            ),
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(10, 45, 0).unwrap(),
+            ),
+            "xchaban",
+        ),
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(11, 30, 0).unwrap(),
+            ),
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(13, 15, 0).unwrap(),
+            ),
+            "xtodorov",
+        ),
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(13, 30, 0).unwrap(),
+            ),
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
+            ),
+            "xchaban",
+        ),
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(
+                day_after_tomorrow,
+                chrono::NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+            ),
+            chrono::NaiveDateTime::new(
+                day_after_tomorrow,
+                chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
+            ),
+            "xchaban",
+        ),
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(
+                day_after_tomorrow,
+                chrono::NaiveTime::from_hms_opt(12, 15, 0).unwrap(),
+            ),
+            chrono::NaiveDateTime::new(
+                day_after_tomorrow,
+                chrono::NaiveTime::from_hms_opt(14, 30, 0).unwrap(),
+            ),
+            "xchaban",
+        ),
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(
+                day_after_tomorrow,
+                chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
+            ),
+            chrono::NaiveDateTime::new(
+                day_after_tomorrow,
+                chrono::NaiveTime::from_hms_opt(16, 0, 0).unwrap(),
+            ),
+            "xchaban",
+        ),
+        TimeInterval::new(
+            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(17, 0, 0).unwrap()),
+            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(17, 15, 0).unwrap()),
+            "xchaban",
+        ),
     ];
 
     ScheduleTable::<Converter>::new(
@@ -80,7 +172,6 @@ fn main() -> anyhow::Result<()> {
         time_col_width,
         y_pos_offset,
         nowline_time,
-        &header_texts,
         time_range,
         &time_intervals,
     )
