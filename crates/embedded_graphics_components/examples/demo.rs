@@ -53,7 +53,7 @@ fn main() -> anyhow::Result<()> {
     let battery_bar_height: u32 = 10; // Высота полосы батареи внизу
 
     let y_pos_offset = 10;
-    let nowline_time = 13.5;
+    let current_time = chrono::NaiveTime::from_hms_opt(13, 30, 0).unwrap();
 
     let today = chrono::NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
     let tomorrow = chrono::NaiveDate::from_ymd_opt(2025, 1, 2).unwrap();
@@ -166,24 +166,21 @@ fn main() -> anyhow::Result<()> {
     ];
 
     ScheduleTable::<Converter>::new(
-        Point::new(0, battery_bar_height as i32), // Table starts at top-left of the display
-        Size::new(display_width, display_height - battery_bar_height), // Table occupies full display
-        header_height,
-        time_col_width,
-        y_pos_offset,
-        nowline_time,
+        Point::new(40, 40),
+        Size::new(display_width - 80, display_height - 80),
+        current_time,
         time_range,
         &time_intervals,
     )
     .draw(&mut display)?;
 
-    let battery_level_percent = 19;
+    // let battery_level_percent = 19;
 
-    BatteryIndicator::<Converter>::new(
-        Point::new(0, 0),
-        Size::new(display_width, battery_bar_height),
-    )
-    .draw(&mut display, battery_level_percent)?;
+    // BatteryIndicator::<Converter>::new(
+    //     Point::new(0, 0),
+    //     Size::new(display_width, battery_bar_height),
+    // )
+    // .draw(&mut display, battery_level_percent)?;
 
     let output_settings = OutputSettingsBuilder::new().scale(2).build();
     Window::new("Hello World", &output_settings).show_static(&display);
