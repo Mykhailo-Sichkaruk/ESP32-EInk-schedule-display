@@ -50,6 +50,7 @@ where
     // styles
     text_style_black: MonoTextStyle<'a, T::Output>,
     text_small_style_black: MonoTextStyle<'a, T::Output>,
+    text_small_style_white: MonoTextStyle<'a, T::Output>,
     thin_style: PrimitiveStyle<T::Output>,
     bold_style: PrimitiveStyle<T::Output>,
     red_bold_style: PrimitiveStyle<T::Output>,
@@ -81,7 +82,11 @@ where
         let text_small_style_black: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
             .font(&FONT_6X12)
             .text_color(T::convert(UnifiedColor::Black))
-            .background_color(T::convert(UnifiedColor::White))
+            .build();
+
+        let text_small_style_white: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
+            .font(&FONT_6X12)
+            .text_color(T::convert(UnifiedColor::White))
             .build();
 
         let thin_style = PrimitiveStyleBuilder::new()
@@ -165,6 +170,7 @@ where
             hours_to_show,
             text_style_black,
             text_small_style_black,
+            text_small_style_white,
             thin_style,
             bold_style,
             red_bold_style,
@@ -370,18 +376,40 @@ where
                 )
                 .draw(display)?;
             }
-            let top_time_y = start_y;
+            let top_time_y = start_y - 4;
             let bottom_time_y = end_y;
             let start_time_str = interval.start.format("%H:%M").to_string();
             let end_time_str = interval.end.format("%H:%M").to_string();
             let start_time_x = col_x + (end_time_str.len() as i32 * SMALL_FONT_WIDTH / 3);
             let end_time_x =
                 col_x + date_col_width - (end_time_str.len() as i32 * SMALL_FONT_WIDTH) - 8;
+
+            let offsets = (-1..=1)
+                .flat_map(|x| (-1..=1).map(move |y| Point::new(x, y)))
+                .collect::<Vec<_>>();
+
+            for offset in offsets {
+                Text::with_baseline(
+                    &start_time_str,
+                    Point::new(start_time_x + offset.x, top_time_y + offset.y),
+                    self.text_small_style_white,
+                    Baseline::Top,
+                )
+                .draw(display)?;
+                Text::with_baseline(
+                    &end_time_str,
+                    Point::new(end_time_x + offset.x, bottom_time_y + offset.y),
+                    self.text_small_style_white,
+                    Baseline::Bottom,
+                )
+                .draw(display)?;
+            }
+
             Text::with_baseline(
                 &start_time_str,
                 Point::new(start_time_x, top_time_y),
                 self.text_small_style_black,
-                Baseline::Middle,
+                Baseline::Top,
             )
             .draw(display)?;
             Text::with_baseline(

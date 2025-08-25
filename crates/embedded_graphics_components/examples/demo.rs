@@ -179,7 +179,7 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
-        thread::sleep(std::time::Duration::from_millis(1000));
+        thread::sleep(std::time::Duration::from_millis(100));
     }
 
     window.show_static(&display);
