@@ -1,9 +1,7 @@
-use std::collections::binary_heap::Iter;
 use std::marker::PhantomData;
-use std::num::Saturating;
-use std::ops::{RangeInclusive, Sub};
+use std::ops::RangeInclusive;
 
-use chrono::{Duration, TimeDelta, prelude::*};
+use chrono::{Duration, prelude::*};
 use embedded_graphics::mono_font::ascii::{FONT_6X12, FONT_10X20};
 use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder};
 use embedded_graphics::prelude::*;
@@ -11,7 +9,6 @@ use embedded_graphics::primitives::{
     CornerRadii, CornerRadiiBuilder, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle,
     RoundedRectangle,
 };
-use embedded_graphics::text::renderer::TextRenderer;
 use embedded_graphics::text::{Baseline, Text};
 
 use crate::errors::{InvalidInterval, ScheduleTableError};
@@ -23,11 +20,6 @@ const SMALL_FONT_HEIGHT: i32 = FONT_6X12.character_size.height as i32;
 const SMALL_FONT_WIDTH: i32 = FONT_6X12.character_size.width as i32;
 
 const TIME_COL_HEADER: &str = "Time";
-
-const DEFAULT_TIME_START: chrono::NaiveTime =
-    chrono::NaiveTime::from_hms_opt(0, 0, 0).expect("Failed to create NaiveTime");
-const DEFAULT_TIME_END: chrono::NaiveTime =
-    chrono::NaiveTime::from_hms_opt(23, 59, 59).expect("Failed to create NaiveTime");
 
 #[derive(Debug, Clone)]
 pub struct TimeInterval<'a> {
@@ -52,7 +44,7 @@ where
     date_range: ChronoRange<NaiveDate>,
     time_intervals: &'a [TimeInterval<'a>],
     hours_to_show: i32,
-    hours_range: ChronoRange<NaiveDateTime>,
+    time_window: ChronoRange<NaiveDateTime>,
 
     // styles
     text_style_black: MonoTextStyle<'a, T::Output>,
@@ -81,109 +73,85 @@ where
         time_intervals: &'a [TimeInterval<'a>],
         hours_to_show: i32,
     ) -> Result<Self, ScheduleTableError> {
-        let text_style_black: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
-            .font(&FONT_10X20)
-            .text_color(T::convert(UnifiedColor::Black))
-            .build();
-
-        let text_small_style_black: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
-            .font(&FONT_6X12)
-            .text_color(T::convert(UnifiedColor::Black))
-            .build();
-
-        let text_small_style_white: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
-            .font(&FONT_6X12)
-            .text_color(T::convert(UnifiedColor::White))
-            .build();
-
-        let thin_style = PrimitiveStyleBuilder::new()
-            .stroke_color(T::convert(UnifiedColor::Black))
-            .stroke_width(1)
-            .build();
-
-        let bold_style = PrimitiveStyleBuilder::new()
-            .stroke_color(T::convert(UnifiedColor::Black))
-            .stroke_width(2)
-            .build();
-
-        let red_bold_style = PrimitiveStyleBuilder::new()
-            .stroke_color(T::convert(UnifiedColor::Chromatic))
-            .stroke_width(4)
-            .build();
-
-        let interval_style = PrimitiveStyleBuilder::new()
-            .stroke_color(T::convert(UnifiedColor::Black))
-            .stroke_width(2)
-            .fill_color(T::convert(UnifiedColor::White))
-            .build();
-
-        let radii = CornerRadiiBuilder::new().all(Size::new(10, 10)).build();
-
-        let (first_date, last_date) = match time_intervals
+        let (first_date, last_date) = time_intervals
             .iter()
             .filter(|i| i.start.date() >= current_time.date())
-            .fold((None, None), |(first, last), interval| {
+            .try_fold((None, None), |(first, last), interval| {
                 let start = interval.start.date();
                 let end = interval.end.date();
-                (
+                Ok((
                     Some(first.map_or(start, |f: NaiveDate| f.min(start))),
                     Some(last.map_or(end, |l: NaiveDate| l.max(end))),
-                )
-            }) {
-            (_, None) => {
-                return Err(ScheduleTableError::InvalidInterval(
-                    InvalidInterval::LastDateNotFound,
-                ));
-            }
-            (None, _) => {
-                return Err(ScheduleTableError::InvalidInterval(
+                ))
+            })
+            .and_then(|(first, last)| {
+                let first = first.ok_or(ScheduleTableError::InvalidInterval(
                     InvalidInterval::FirstDateNotFound,
-                ));
-            }
-            (Some(first), Some(last)) => (first, last),
-        };
+                ))?;
+                let last = last.ok_or(ScheduleTableError::InvalidInterval(
+                    InvalidInterval::LastDateNotFound,
+                ))?;
+                Ok((first, last))
+            })?;
 
-        // calculate the hours range
-        let mut start_hours_range_add = 0;
-        let mut end_hours_range_add = 0;
+        let half_window_hours = hours_to_show / 2;
+        let current_hour = current_time.hour() as i32;
 
-        let start_hours_range = if current_time.hour() as i32 - hours_to_show / 2 < 0 {
-            end_hours_range_add += hours_to_show / 2 - current_time.hour() as i32;
-            current_time.date().and_time(DEFAULT_TIME_START)
-        } else {
-            current_time - Duration::hours((hours_to_show / 2) as i64)
-        };
+        // clamp window to [0, 23]
+        let clamped_start_hour = (current_hour - half_window_hours).max(0)
+            + -(current_hour + half_window_hours - 24).max(0);
+        let clamped_end_hour =
+            (current_hour + half_window_hours).min(23) + -(current_hour - half_window_hours).min(0);
 
-        let end_hours_range = if current_time.hour() as i32 + hours_to_show / 2 > 24 {
-            start_hours_range_add += current_time.hour() as i32 + hours_to_show / 2 - 24;
-            (current_time.date()).and_time(DEFAULT_TIME_END)
-        } else {
-            current_time + Duration::hours((hours_to_show / 2) as i64)
-        };
+        // minutes become 00 by construction
+        let start_of_window = current_time.date().and_time(
+            chrono::NaiveTime::from_hms_opt(clamped_start_hour as u32, 0, 0)
+                .expect("Failed to create NaiveTime"),
+        );
 
-        let start_hours_range = start_hours_range - Duration::hours(start_hours_range_add as i64);
-        let end_hours_range = end_hours_range + Duration::hours(end_hours_range_add as i64);
-
-        let start_hours_range =
-            start_hours_range - Duration::minutes(start_hours_range.minute() as i64);
-        let end_hours_range = end_hours_range - Duration::minutes(end_hours_range.minute() as i64);
+        let end_of_window = current_time.date().and_time(
+            chrono::NaiveTime::from_hms_opt(clamped_end_hour as u32, 0, 0)
+                .expect("Failed to create NaiveTime"),
+        );
 
         Ok(ScheduleTable {
             top_left,
             size,
             current_time,
             date_range: ChronoRange::from(first_date..=last_date),
-            hours_range: ChronoRange::from(start_hours_range..=end_hours_range),
+            time_window: ChronoRange::from(start_of_window..=end_of_window),
             time_intervals,
             hours_to_show,
-            text_style_black,
-            text_small_style_black,
-            text_small_style_white,
-            thin_style,
-            bold_style,
-            red_bold_style,
-            interval_style,
-            radii,
+            text_style_black: MonoTextStyleBuilder::new()
+                .font(&FONT_10X20)
+                .text_color(T::convert(UnifiedColor::Black))
+                .build(),
+            text_small_style_black: MonoTextStyleBuilder::new()
+                .font(&FONT_6X12)
+                .text_color(T::convert(UnifiedColor::Black))
+                .build(),
+            text_small_style_white: MonoTextStyleBuilder::new()
+                .font(&FONT_6X12)
+                .text_color(T::convert(UnifiedColor::White))
+                .build(),
+            thin_style: PrimitiveStyleBuilder::new()
+                .stroke_color(T::convert(UnifiedColor::Black))
+                .stroke_width(1)
+                .build(),
+            bold_style: PrimitiveStyleBuilder::new()
+                .stroke_color(T::convert(UnifiedColor::Black))
+                .stroke_width(2)
+                .build(),
+            red_bold_style: PrimitiveStyleBuilder::new()
+                .stroke_color(T::convert(UnifiedColor::Chromatic))
+                .stroke_width(4)
+                .build(),
+            interval_style: PrimitiveStyleBuilder::new()
+                .stroke_color(T::convert(UnifiedColor::Black))
+                .stroke_width(2)
+                .fill_color(T::convert(UnifiedColor::White))
+                .build(),
+            radii: CornerRadiiBuilder::new().all(Size::new(10, 10)).build(),
             _phantom: PhantomData,
         })
     }
@@ -303,7 +271,7 @@ where
 
         // time column texts
         for (i, text) in self
-            .hours_range
+            .time_window
             .iter_hours()
             .map(|dt| dt.time().format("%H:%M").to_string())
             .enumerate()
@@ -342,8 +310,8 @@ where
 
             let col_x = content_left + col_index * date_col_width;
 
-            let rel_start = interval.start.time() - self.hours_range.start().time();
-            let rel_end = interval.end.time() - self.hours_range.start().time();
+            let rel_start = interval.start.time() - self.time_window.start().time();
+            let rel_end = interval.end.time() - self.time_window.start().time();
 
             let start_y = content_top as f32
                 + (rel_start.num_hours() as f32 * row_height as f32)
@@ -396,9 +364,7 @@ where
             let end_time_x =
                 col_x + date_col_width - (end_time_str.len() as i32 * SMALL_FONT_WIDTH) - 8;
 
-            let offsets = (-1..=1)
-                .flat_map(|x| (-1..=1).map(move |y| Point::new(x, y)))
-                .collect::<Vec<_>>();
+            let offsets = (-1..=1).flat_map(|x| (-1..=1).map(move |y| Point::new(x, y)));
 
             for offset in offsets {
                 Text::with_baseline(
@@ -435,7 +401,7 @@ where
 
         // draw current time line
         let now_line_y = content_top
-            + ((self.current_time.hour() as i32 - self.hours_range.start().hour() as i32)
+            + ((self.current_time.hour() as i32 - self.time_window.start().hour() as i32)
                 * row_height)
             + (self.current_time.minute() as f32 * row_height as f32 / 60.0) as i32;
 
