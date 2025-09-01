@@ -31,6 +31,7 @@ impl IntoPixelColorConverter for Converter {
 fn main() -> anyhow::Result<()> {
     // Create a simulator display
     let mut display: SimulatorDisplay<Rgb565> = SimulatorDisplay::new(Size::new(480, 800));
+    // let mut display: SimulatorDisplay<Rgb565> = SimulatorDisplay::new(Size::new(800, 480));
 
     // // Simulate the drawing process
     // display.set_rotation(epd_waveshare::prelude::DisplayRotation::Rotate90);
@@ -167,9 +168,9 @@ fn main() -> anyhow::Result<()> {
             // Point::new(0, 0),
             // Size::new(display_width, display_height),
             current_time,
-            time_intervals.clone(),
+            &time_intervals,
             12,
-        )
+        )?
         .draw(&mut display)?;
         window.update(&display);
         for event in window.events() {

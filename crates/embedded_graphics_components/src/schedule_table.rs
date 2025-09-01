@@ -1,3 +1,4 @@
+use std::collections::binary_heap::Iter;
 use std::marker::PhantomData;
 use std::num::Saturating;
 use std::ops::{RangeInclusive, Sub};
@@ -13,6 +14,7 @@ use embedded_graphics::primitives::{
 use embedded_graphics::text::renderer::TextRenderer;
 use embedded_graphics::text::{Baseline, Text};
 
+use crate::errors::{InvalidInterval, ScheduleTableError};
 use crate::unified_color::{IntoPixelColorConverter, UnifiedColor};
 
 const FONT_HEIGHT: i32 = FONT_10X20.character_size.height as i32;
@@ -21,6 +23,11 @@ const SMALL_FONT_HEIGHT: i32 = FONT_6X12.character_size.height as i32;
 const SMALL_FONT_WIDTH: i32 = FONT_6X12.character_size.width as i32;
 
 const TIME_COL_HEADER: &str = "Time";
+
+const DEFAULT_TIME_START: chrono::NaiveTime =
+    chrono::NaiveTime::from_hms_opt(0, 0, 0).expect("Failed to create NaiveTime");
+const DEFAULT_TIME_END: chrono::NaiveTime =
+    chrono::NaiveTime::from_hms_opt(23, 59, 59).expect("Failed to create NaiveTime");
 
 #[derive(Debug, Clone)]
 pub struct TimeInterval<'a> {
@@ -43,7 +50,7 @@ where
     size: Size,
     current_time: NaiveDateTime,
     date_range: ChronoRange<NaiveDate>,
-    time_intervals: Vec<TimeInterval<'a>>,
+    time_intervals: &'a [TimeInterval<'a>],
     hours_to_show: i32,
     hours_range: ChronoRange<NaiveDateTime>,
 
@@ -71,9 +78,9 @@ where
         top_left: Point,
         size: Size,
         current_time: NaiveDateTime,
-        time_intervals: Vec<TimeInterval<'a>>,
+        time_intervals: &'a [TimeInterval<'a>],
         hours_to_show: i32,
-    ) -> Self {
+    ) -> Result<Self, ScheduleTableError> {
         let text_style_black: MonoTextStyle<T::Output> = MonoTextStyleBuilder::new()
             .font(&FONT_10X20)
             .text_color(T::convert(UnifiedColor::Black))
@@ -112,26 +119,29 @@ where
 
         let radii = CornerRadiiBuilder::new().all(Size::new(10, 10)).build();
 
-        // filter intervals, keep only current and future dates
-        let time_intervals = time_intervals
+        let (first_date, last_date) = match time_intervals
             .iter()
             .filter(|i| i.start.date() >= current_time.date())
-            .cloned()
-            .collect::<Vec<_>>();
-
-        // calculate the date range
-        let first_date = time_intervals
-            .iter()
-            .min_by_key(|i| i.start.date())
-            .unwrap()
-            .start
-            .date();
-        let last_date = time_intervals
-            .iter()
-            .max_by_key(|i| i.end.date())
-            .unwrap()
-            .end
-            .date();
+            .fold((None, None), |(first, last), interval| {
+                let start = interval.start.date();
+                let end = interval.end.date();
+                (
+                    Some(first.map_or(start, |f: NaiveDate| f.min(start))),
+                    Some(last.map_or(end, |l: NaiveDate| l.max(end))),
+                )
+            }) {
+            (_, None) => {
+                return Err(ScheduleTableError::InvalidInterval(
+                    InvalidInterval::LastDateNotFound,
+                ));
+            }
+            (None, _) => {
+                return Err(ScheduleTableError::InvalidInterval(
+                    InvalidInterval::FirstDateNotFound,
+                ));
+            }
+            (Some(first), Some(last)) => (first, last),
+        };
 
         // calculate the hours range
         let mut start_hours_range_add = 0;
@@ -139,16 +149,14 @@ where
 
         let start_hours_range = if current_time.hour() as i32 - hours_to_show / 2 < 0 {
             end_hours_range_add += hours_to_show / 2 - current_time.hour() as i32;
-            current_time
-                .date()
-                .and_time(chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+            current_time.date().and_time(DEFAULT_TIME_START)
         } else {
             current_time - Duration::hours((hours_to_show / 2) as i64)
         };
 
         let end_hours_range = if current_time.hour() as i32 + hours_to_show / 2 > 24 {
             start_hours_range_add += current_time.hour() as i32 + hours_to_show / 2 - 24;
-            (current_time.date()).and_time(chrono::NaiveTime::from_hms_opt(23, 59, 59).unwrap())
+            (current_time.date()).and_time(DEFAULT_TIME_END)
         } else {
             current_time + Duration::hours((hours_to_show / 2) as i64)
         };
@@ -160,7 +168,7 @@ where
             start_hours_range - Duration::minutes(start_hours_range.minute() as i64);
         let end_hours_range = end_hours_range - Duration::minutes(end_hours_range.minute() as i64);
 
-        ScheduleTable {
+        Ok(ScheduleTable {
             top_left,
             size,
             current_time,
@@ -177,7 +185,7 @@ where
             interval_style,
             radii,
             _phantom: PhantomData,
-        }
+        })
     }
 
     pub fn draw<D>(&self, display: &mut D) -> Result<(), D::Error>
@@ -316,7 +324,11 @@ where
         }
 
         // Time intervals
-        for interval in self.time_intervals.iter() {
+        for interval in self
+            .time_intervals
+            .iter()
+            .filter(|i| i.start.date() >= self.current_time.date())
+        {
             let col_index = if let Some(index) = self
                 .date_range
                 .iter_days()
