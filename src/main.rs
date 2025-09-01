@@ -184,8 +184,8 @@ fn main() -> anyhow::Result<()> {
         chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
 
     ScheduleTable::new(
-        Point::new(40, 40),
-        Size::new(display_width - 80, display_height - 80),
+        Point::new(0, 0),
+        Size::new(display_width, display_height),
         ScheduleTableStyleBuilder::new(Palette::new(
             TriColor::Black,
             TriColor::White,
