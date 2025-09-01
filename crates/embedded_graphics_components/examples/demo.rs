@@ -1,13 +1,18 @@
-use std::thread;
+use std::{
+    ops::{Range, RangeInclusive},
+    thread,
+};
 
 use chrono::Duration;
 use embedded_graphics::{
     pixelcolor::Rgb565,
     prelude::{Dimensions, Point, Size},
+    primitives::PrimitiveStyleBuilder,
 };
 use embedded_graphics_components::{
     battery_indicator::BatteryIndicator,
-    schedule_table::{ChronoRange, ScheduleTable, TimeInterval},
+    schedule_table::{ScheduleTable, TimeInterval},
+    schedule_table_style::{Palette, ScheduleTableStyle, ScheduleTableStyleBuilder},
     unified_color::{IntoPixelColorConverter, UnifiedColor},
 };
 use embedded_graphics_simulator::{
@@ -162,11 +167,15 @@ fn main() -> anyhow::Result<()> {
     )
     .iter(Duration::minutes(15))
     {
-        ScheduleTable::<Converter>::new(
+        ScheduleTable::new(
             Point::new(40, 40),
             Size::new(display_width - 80, display_height - 80),
-            // Point::new(0, 0),
-            // Size::new(display_width, display_height),
+            ScheduleTableStyleBuilder::new(Palette::new(
+                Rgb565::new(0, 0, 0),
+                Rgb565::new(255, 255, 255),
+                Rgb565::new(255, 0, 0),
+            ))
+            .build(),
             current_time,
             &time_intervals,
             12,
@@ -179,11 +188,122 @@ fn main() -> anyhow::Result<()> {
                 return Ok(());
             }
         }
-
         thread::sleep(std::time::Duration::from_millis(100));
     }
 
     window.show_static(&display);
 
     Ok(())
+}
+
+// Utils
+
+#[derive(Debug, Clone)]
+pub struct ChronoRange<T> {
+    start: T,
+    end: T,
+    inclusive: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChronoRangeIter<T> {
+    step: chrono::Duration,
+    current: T,
+    end: T,
+    inclusive: bool,
+}
+
+impl<T> Iterator for ChronoRangeIter<T>
+where
+    T: Copy + PartialOrd + std::ops::Add<chrono::Duration, Output = T>,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.inclusive {
+            if self.current > self.end {
+                None
+            } else {
+                let next = self.current;
+                // Saturating add
+                let current = self.current + self.step;
+                if current < self.current {
+                    return None;
+                } else {
+                    self.current = current;
+                }
+                Some(next)
+            }
+        } else {
+            if self.current >= self.end {
+                None
+            } else {
+                let next = self.current;
+                // Saturating add
+                let current = self.current + self.step;
+                if current < self.current {
+                    return None;
+                } else {
+                    self.current = current;
+                }
+                Some(next)
+            }
+        }
+    }
+}
+
+impl<T> ChronoRange<T>
+where
+    T: Copy + Clone,
+{
+    pub fn iter(&self, step: chrono::Duration) -> ChronoRangeIter<T> {
+        ChronoRangeIter {
+            current: self.start,
+            end: self.end,
+            step,
+            inclusive: self.inclusive,
+        }
+    }
+
+    pub fn iter_days(&self) -> ChronoRangeIter<T> {
+        self.iter(Duration::days(1))
+    }
+
+    pub fn iter_hours(&self) -> ChronoRangeIter<T> {
+        self.iter(Duration::hours(1))
+    }
+
+    pub fn start(&self) -> &T {
+        &self.start
+    }
+
+    pub fn end(&self) -> &T {
+        &self.end
+    }
+}
+
+impl<T> From<RangeInclusive<T>> for ChronoRange<T>
+where
+    T: Copy,
+{
+    fn from(range: RangeInclusive<T>) -> Self {
+        ChronoRange {
+            start: *range.start(),
+            end: *range.end(),
+            inclusive: true,
+        }
+    }
+}
+
+impl<T> From<Range<T>> for ChronoRange<T>
+where
+    T: Copy + Clone,
+{
+    fn from(range: Range<T>) -> Self {
+        ChronoRange {
+            start: range.start,
+            end: range.end,
+            inclusive: false,
+        }
+    }
 }

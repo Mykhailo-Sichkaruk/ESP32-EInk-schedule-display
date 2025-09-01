@@ -1,25 +1,12 @@
-use std::marker::PhantomData;
-use std::ops::RangeInclusive;
+use std::ops::{Range, RangeInclusive};
 
 use chrono::{Duration, prelude::*};
-use embedded_graphics::mono_font::ascii::{FONT_6X12, FONT_10X20};
-use embedded_graphics::mono_font::{MonoTextStyle, MonoTextStyleBuilder};
 use embedded_graphics::prelude::*;
-use embedded_graphics::primitives::{
-    CornerRadii, CornerRadiiBuilder, Line, PrimitiveStyle, PrimitiveStyleBuilder, Rectangle,
-    RoundedRectangle,
-};
-use embedded_graphics::text::{Baseline, Text};
+use embedded_graphics::primitives::{Line, Rectangle, RoundedRectangle};
+use embedded_graphics::text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder};
 
 use crate::errors::{InvalidInterval, ScheduleTableError};
-use crate::unified_color::{IntoPixelColorConverter, UnifiedColor};
-
-const FONT_HEIGHT: i32 = FONT_10X20.character_size.height as i32;
-const FONT_WIDTH: i32 = FONT_10X20.character_size.width as i32;
-const SMALL_FONT_HEIGHT: i32 = FONT_6X12.character_size.height as i32;
-const SMALL_FONT_WIDTH: i32 = FONT_6X12.character_size.width as i32;
-
-const TIME_COL_HEADER: &str = "Time";
+use crate::schedule_table_style::ScheduleTableStyle;
 
 #[derive(Debug, Clone)]
 pub struct TimeInterval<'a> {
@@ -34,41 +21,33 @@ impl<'a> TimeInterval<'a> {
     }
 }
 
-pub struct ScheduleTable<'a, T>
+pub struct ScheduleTable<'a, C>
 where
-    T: IntoPixelColorConverter,
+    C: PixelColor,
 {
     top_left: Point,
     size: Size,
     current_time: NaiveDateTime,
-    date_range: ChronoRange<NaiveDate>,
+    date_range: Vec<NaiveDate>,
     time_intervals: &'a [TimeInterval<'a>],
-    hours_to_show: i32,
-    time_window: ChronoRange<NaiveDateTime>,
+    hours_to_show: i32, // FIXME: remove
+    time_window_start: NaiveTime,
 
     // styles
-    text_black: MonoTextStyle<'a, T::Output>,
-    text_small_black: MonoTextStyle<'a, T::Output>,
-    text_small_white: MonoTextStyle<'a, T::Output>,
-    style_black_thin: PrimitiveStyle<T::Output>,
-    style_black_bold: PrimitiveStyle<T::Output>,
-    style_chromatic_bold: PrimitiveStyle<T::Output>,
-    style_black_stroke_white_fill: PrimitiveStyle<T::Output>,
-
-    radii_10x10: CornerRadii,
-
-    _phantom: PhantomData<T>,
+    style: ScheduleTableStyle<'a, C>,
 }
 
-impl<'a, T> ScheduleTable<'a, T>
+impl<'a, C> ScheduleTable<'a, C>
 where
-    T: IntoPixelColorConverter,
-    T::Output: PixelColor,
+    C: PixelColor,
 {
+    const TIME_COL_HEADER: &'static str = "Time";
+
     #[allow(clippy::too_many_arguments)] // this many arguments are justified for a schedule table
     pub fn new(
         top_left: Point,
         size: Size,
+        style: ScheduleTableStyle<'a, C>,
         current_time: NaiveDateTime,
         time_intervals: &'a [TimeInterval<'a>],
         hours_to_show: i32,
@@ -118,58 +97,27 @@ where
             top_left,
             size,
             current_time,
-            date_range: ChronoRange::from(first_date..=last_date),
-            time_window: ChronoRange::from(start_of_window..=end_of_window),
+            date_range: Vec::from_iter(
+                (0..=last_date.signed_duration_since(first_date).num_days())
+                    .map(|d| first_date + Duration::days(d)),
+            ),
+            time_window_start: start_of_window.time(),
             time_intervals,
             hours_to_show,
-            text_black: MonoTextStyleBuilder::new()
-                .font(&FONT_10X20)
-                .text_color(T::convert(UnifiedColor::Black))
-                .build(),
-            text_small_black: MonoTextStyleBuilder::new()
-                .font(&FONT_6X12)
-                .text_color(T::convert(UnifiedColor::Black))
-                .build(),
-            text_small_white: MonoTextStyleBuilder::new()
-                .font(&FONT_6X12)
-                .text_color(T::convert(UnifiedColor::White))
-                .build(),
-            style_black_thin: PrimitiveStyleBuilder::new()
-                .stroke_color(T::convert(UnifiedColor::Black))
-                .stroke_width(1)
-                .build(),
-            style_black_bold: PrimitiveStyleBuilder::new()
-                .stroke_color(T::convert(UnifiedColor::Black))
-                .stroke_width(2)
-                .build(),
-            style_chromatic_bold: PrimitiveStyleBuilder::new()
-                .stroke_color(T::convert(UnifiedColor::Chromatic))
-                .stroke_width(4)
-                .build(),
-            style_black_stroke_white_fill: PrimitiveStyleBuilder::new()
-                .stroke_color(T::convert(UnifiedColor::Black))
-                .stroke_width(2)
-                .fill_color(T::convert(UnifiedColor::White))
-                .build(),
-            radii_10x10: CornerRadiiBuilder::new().all(Size::new(10, 10)).build(),
-            _phantom: PhantomData,
+            style,
         })
     }
 
     pub fn draw<D>(&self, display: &mut D) -> Result<(), D::Error>
     where
-        D: DrawTarget<Color = T::Output>,
+        D: DrawTarget<Color = C>,
     {
         // clear the display area for the table
         Rectangle::new(self.top_left, self.size)
-            .into_styled(
-                PrimitiveStyleBuilder::new()
-                    .fill_color(T::convert(UnifiedColor::White))
-                    .build(),
-            )
+            .into_styled(self.style.background)
             .draw(display)?;
 
-        let days_count = self.date_range.iter_days().count() as i32;
+        let days_count = self.date_range.len() as i32;
 
         // component positioning
         let component_width = self.size.width as i32;
@@ -179,8 +127,8 @@ where
         let component_top = self.top_left.y;
         let component_bottom = component_height + self.top_left.y;
 
-        let header_height = FONT_HEIGHT * 2; // two lines for header
-        let time_col_width = FONT_WIDTH * 6; // width for time column (e.g., "HH:MM")
+        let header_height = self.style.text_body.font.character_size.height as i32 * 2; // two lines for header
+        let time_col_width = self.style.text_body.font.character_size.width as i32 * 6; // width for time column (e.g., "HH:MM")
         let date_col_width = (component_width - time_col_width) / days_count;
         let row_height = (component_height - header_height) / self.hours_to_show;
 
@@ -189,9 +137,11 @@ where
         let content_bottom = component_bottom;
         let content_left = self.top_left.x + time_col_width;
 
+        let body_font_height = self.style.text_body.font.character_size.height as i32;
+
         // draw outer border
         Rectangle::new(self.top_left, self.size)
-            .into_styled(self.style_black_thin)
+            .into_styled(self.style.border)
             .draw(display)?;
 
         // draw header line
@@ -199,7 +149,7 @@ where
             Point::new(component_left, self.top_left.y + header_height),
             Point::new(component_right, self.top_left.y + header_height),
         )
-        .into_styled(self.style_black_bold)
+        .into_styled(self.style.header_line)
         .draw(display)?;
 
         // draw horizontal lines for each hour
@@ -209,7 +159,7 @@ where
                 Point::new(component_left, y),
                 Point::new(component_right, y),
             )
-            .into_styled(self.style_black_thin)
+            .into_styled(self.style.grid_line)
             .draw(display)?;
         }
 
@@ -218,7 +168,7 @@ where
             Point::new(content_left, component_top),
             Point::new(content_left, component_bottom),
         )
-        .into_styled(self.style_black_thin)
+        .into_styled(self.style.grid_line)
         .draw(display)?;
 
         // draw vertical lines for each date column
@@ -228,21 +178,22 @@ where
                 Point::new(x, component_top),
                 Point::new(x, component_bottom),
             )
-            .into_styled(self.style_black_thin)
+            .into_styled(self.style.grid_line)
             .draw(display)?;
         }
 
         // draw time column text
         {
-            let col_width = time_col_width;
-            let text_width = TIME_COL_HEADER.len() as i32 * FONT_WIDTH;
-            let x_pos = component_left + (col_width / 2) - (text_width / 2);
-            let y_pos = component_top + FONT_HEIGHT / 3;
-            Text::with_baseline(
-                TIME_COL_HEADER,
+            let x_pos = component_left + (time_col_width / 2);
+            let y_pos = component_top + body_font_height / 3;
+            Text::with_text_style(
+                Self::TIME_COL_HEADER,
                 Point::new(x_pos, y_pos),
-                self.text_black,
-                Baseline::Top,
+                self.style.text_body,
+                TextStyleBuilder::new()
+                    .alignment(Alignment::Center)
+                    .baseline(Baseline::Top)
+                    .build(),
             )
             .draw(display)?;
         }
@@ -250,43 +201,44 @@ where
         // draw date columns texts
         for (i, text) in self
             .date_range
-            .iter_days()
+            .iter()
             .map(|d| d.format("%d.%m.%Y").to_string())
             .enumerate()
             .map(|(i, text)| (i as i32 + 1, text))
         {
-            let col_x = content_left + (i - 1) * date_col_width;
-            let text_width = text.len() as i32 * FONT_WIDTH;
-            let x_pos = col_x + (date_col_width / 2) - (text_width / 2);
-            let y_pos = component_top + FONT_HEIGHT / 3;
+            let x_pos = content_left + (i - 1) * date_col_width + (date_col_width / 2);
+            let y_pos = component_top + body_font_height / 3;
 
-            Text::with_baseline(
+            Text::with_text_style(
                 &text,
                 Point::new(x_pos, y_pos),
-                self.text_black,
-                Baseline::Top,
+                self.style.text_body,
+                TextStyleBuilder::new()
+                    .alignment(Alignment::Center)
+                    .baseline(Baseline::Top)
+                    .build(),
             )
             .draw(display)?;
         }
 
         // time column texts
-        for (i, text) in self
-            .time_window
-            .iter_hours()
-            .map(|dt| dt.time().format("%H:%M").to_string())
+        for (i, text) in (0..self.hours_to_show)
+            .map(|h| self.time_window_start + Duration::hours(h as i64))
+            .map(|dt| dt.format("%H:%M").to_string())
             .enumerate()
             .map(|(i, text)| (i as i32, text))
         {
-            let row_y = content_top + i * row_height;
-            let text_width = text.len() as i32 * FONT_WIDTH;
-            let x_pos = component_left + (time_col_width / 2) - (text_width / 2);
-            let y_pos = row_y + FONT_HEIGHT / 3;
+            let x_pos = component_left + (time_col_width / 2);
+            let y_pos = content_top + i * row_height;
 
-            Text::with_baseline(
+            Text::with_text_style(
                 &text,
                 Point::new(x_pos, y_pos),
-                self.text_black,
-                Baseline::Top,
+                self.style.text_body,
+                TextStyleBuilder::new()
+                    .alignment(Alignment::Center)
+                    .baseline(Baseline::Top)
+                    .build(),
             )
             .draw(display)?;
         }
@@ -299,8 +251,8 @@ where
         {
             let col_index = if let Some(index) = self
                 .date_range
-                .iter_days()
-                .position(|d| interval.start.date() == d)
+                .iter()
+                .position(|d| interval.start.date() == *d)
                 .map(|index| index as i32)
             {
                 index
@@ -310,8 +262,8 @@ where
 
             let col_x = content_left + col_index * date_col_width;
 
-            let rel_start = interval.start.time() - self.time_window.start().time();
-            let rel_end = interval.end.time() - self.time_window.start().time();
+            let rel_start = interval.start.time() - self.time_window_start;
+            let rel_end = interval.end.time() - self.time_window_start;
 
             let start_y = content_top as f32
                 + (rel_start.num_hours() as f32 * row_height as f32)
@@ -334,74 +286,99 @@ where
                 continue; // skip intervals that are not in the visible range
             }
 
+            let box_start_y = start_y + self.style.interval_box_margin;
+            let box_start_x = col_x + self.style.interval_box_margin;
+            let box_width = (date_col_width - self.style.interval_box_margin * 2).max(0);
+            let box_height = (end_y - start_y - self.style.interval_box_margin * 2).max(0);
+
             RoundedRectangle::new(
                 Rectangle::new(
-                    Point::new(col_x + 4, start_y + 4),
-                    Size::new(date_col_width as u32 - 8, (end_y - start_y) as u32 - 8),
+                    Point::new(box_start_x, box_start_y),
+                    Size::new(box_width as u32, box_height as u32),
                 ),
-                self.radii_10x10,
+                self.style.interval_box_radii,
             )
-            .into_styled(self.style_black_stroke_white_fill)
+            .into_styled(self.style.interval_box)
             .draw(display)?;
 
-            if (end_y - start_y) >= FONT_HEIGHT {
-                let text_width_approx = interval.label.len() as i32 * FONT_WIDTH;
-                let text_x = col_x + (date_col_width / 2) - (text_width_approx / 2);
+            if (end_y - start_y) >= body_font_height {
+                let text_x = col_x + (date_col_width / 2);
                 let text_y = start_y + (end_y - start_y) / 2;
-                Text::with_baseline(
+                Text::with_text_style(
                     interval.label,
                     Point::new(text_x, text_y),
-                    self.text_black,
-                    Baseline::Middle,
+                    self.style.text_body,
+                    TextStyleBuilder::new()
+                        .alignment(Alignment::Center)
+                        .baseline(Baseline::Middle)
+                        .build(),
                 )
                 .draw(display)?;
             }
-            let top_time_y = start_y - 4;
-            let bottom_time_y = end_y;
+
             let start_time_str = interval.start.format("%H:%M").to_string();
             let end_time_str = interval.end.format("%H:%M").to_string();
-            let start_time_x = col_x + (end_time_str.len() as i32 * SMALL_FONT_WIDTH / 3);
-            let end_time_x =
-                col_x + date_col_width - (end_time_str.len() as i32 * SMALL_FONT_WIDTH) - 8;
+            let text_start_x = col_x
+                + self.style.interval_box_margin
+                + self.style.interval_box_radii.top_left.width as i32;
+            let text_end_x = col_x + date_col_width
+                - self.style.interval_box_margin
+                - self.style.interval_box_radii.bottom_right.width as i32;
 
-            let offsets = (-1..=1).flat_map(|x| (-1..=1).map(move |y| Point::new(x, y)));
+            if let Some((style, x_range, y_range)) = &self.style.text_small_shadow {
+                let offsets = x_range
+                    .clone()
+                    .flat_map(|x| y_range.clone().map(move |y| Point::new(x, y)));
 
-            for offset in offsets {
-                Text::with_baseline(
-                    &start_time_str,
-                    Point::new(start_time_x + offset.x, top_time_y + offset.y),
-                    self.text_small_white,
-                    Baseline::Top,
-                )
-                .draw(display)?;
-                Text::with_baseline(
-                    &end_time_str,
-                    Point::new(end_time_x + offset.x, bottom_time_y + offset.y),
-                    self.text_small_white,
-                    Baseline::Bottom,
-                )
-                .draw(display)?;
+                for offset in offsets {
+                    Text::with_text_style(
+                        &start_time_str,
+                        Point::new(text_start_x + offset.x, box_start_y + offset.y),
+                        *style,
+                        TextStyleBuilder::new()
+                            .alignment(Alignment::Left)
+                            .baseline(Baseline::Middle)
+                            .build(),
+                    )
+                    .draw(display)?;
+                    Text::with_text_style(
+                        &end_time_str,
+                        Point::new(text_end_x + offset.x, box_start_y + box_height + offset.y),
+                        *style,
+                        TextStyleBuilder::new()
+                            .alignment(Alignment::Right)
+                            .baseline(Baseline::Middle)
+                            .build(),
+                    )
+                    .draw(display)?;
+                }
             }
 
-            Text::with_baseline(
+            Text::with_text_style(
                 &start_time_str,
-                Point::new(start_time_x, top_time_y),
-                self.text_small_black,
-                Baseline::Top,
+                Point::new(text_start_x, box_start_y),
+                self.style.text_small,
+                TextStyleBuilder::new()
+                    .alignment(Alignment::Left)
+                    .baseline(Baseline::Middle)
+                    .build(),
             )
             .draw(display)?;
-            Text::with_baseline(
+            Text::with_text_style(
                 &end_time_str,
-                Point::new(end_time_x, bottom_time_y),
-                self.text_small_black,
-                Baseline::Bottom,
+                Point::new(text_end_x, box_start_y + box_height),
+                self.style.text_small,
+                TextStyleBuilder::new()
+                    .alignment(Alignment::Right)
+                    .baseline(Baseline::Middle)
+                    .build(),
             )
             .draw(display)?;
         }
 
         // draw current time line
         let now_line_y = content_top
-            + ((self.current_time.hour() as i32 - self.time_window.start().hour() as i32)
+            + ((self.current_time.hour() as i32 - self.time_window_start.hour() as i32)
                 * row_height)
             + (self.current_time.minute() as f32 * row_height as f32 / 60.0) as i32;
 
@@ -411,79 +388,9 @@ where
             Point::new(component_left, now_line_y),
             Point::new(line_end_x, now_line_y),
         )
-        .into_styled(self.style_chromatic_bold)
+        .into_styled(self.style.time_line)
         .draw(display)?;
 
         Ok(())
-    }
-}
-
-// Utils
-
-#[derive(Debug, Clone)]
-pub struct ChronoRange<T>(RangeInclusive<T>);
-
-#[derive(Debug, Clone)]
-pub struct ChronoRangeIter<T> {
-    step: chrono::Duration,
-    current: T,
-    end: T,
-}
-
-impl<T> Iterator for ChronoRangeIter<T>
-where
-    T: Copy + PartialOrd + std::ops::Add<chrono::Duration, Output = T>,
-{
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current > self.end {
-            None
-        } else {
-            let next = self.current;
-            // Saturating add
-            let current = self.current + self.step;
-            if current < self.current {
-                return None;
-            } else {
-                self.current = current;
-            }
-            Some(next)
-        }
-    }
-}
-
-impl<T> ChronoRange<T>
-where
-    T: Copy,
-{
-    pub fn iter(&self, step: chrono::Duration) -> ChronoRangeIter<T> {
-        ChronoRangeIter {
-            current: *self.0.start(),
-            end: *self.0.end(),
-            step,
-        }
-    }
-
-    pub fn iter_days(&self) -> ChronoRangeIter<T> {
-        self.iter(Duration::days(1))
-    }
-
-    pub fn iter_hours(&self) -> ChronoRangeIter<T> {
-        self.iter(Duration::hours(1))
-    }
-
-    pub fn start(&self) -> &T {
-        self.0.start()
-    }
-
-    fn end(&self) -> &T {
-        self.0.end()
-    }
-}
-
-impl<T> From<RangeInclusive<T>> for ChronoRange<T> {
-    fn from(range: RangeInclusive<T>) -> Self {
-        ChronoRange(range)
     }
 }
