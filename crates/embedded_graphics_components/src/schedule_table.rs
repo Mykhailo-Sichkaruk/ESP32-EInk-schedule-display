@@ -47,15 +47,15 @@ where
     time_window: ChronoRange<NaiveDateTime>,
 
     // styles
-    text_style_black: MonoTextStyle<'a, T::Output>,
-    text_small_style_black: MonoTextStyle<'a, T::Output>,
-    text_small_style_white: MonoTextStyle<'a, T::Output>,
-    thin_style: PrimitiveStyle<T::Output>,
-    bold_style: PrimitiveStyle<T::Output>,
-    red_bold_style: PrimitiveStyle<T::Output>,
-    interval_style: PrimitiveStyle<T::Output>,
+    text_black: MonoTextStyle<'a, T::Output>,
+    text_small_black: MonoTextStyle<'a, T::Output>,
+    text_small_white: MonoTextStyle<'a, T::Output>,
+    style_black_thin: PrimitiveStyle<T::Output>,
+    style_black_bold: PrimitiveStyle<T::Output>,
+    style_chromatic_bold: PrimitiveStyle<T::Output>,
+    style_black_stroke_white_fill: PrimitiveStyle<T::Output>,
 
-    radii: CornerRadii,
+    radii_10x10: CornerRadii,
 
     _phantom: PhantomData<T>,
 }
@@ -122,36 +122,36 @@ where
             time_window: ChronoRange::from(start_of_window..=end_of_window),
             time_intervals,
             hours_to_show,
-            text_style_black: MonoTextStyleBuilder::new()
+            text_black: MonoTextStyleBuilder::new()
                 .font(&FONT_10X20)
                 .text_color(T::convert(UnifiedColor::Black))
                 .build(),
-            text_small_style_black: MonoTextStyleBuilder::new()
+            text_small_black: MonoTextStyleBuilder::new()
                 .font(&FONT_6X12)
                 .text_color(T::convert(UnifiedColor::Black))
                 .build(),
-            text_small_style_white: MonoTextStyleBuilder::new()
+            text_small_white: MonoTextStyleBuilder::new()
                 .font(&FONT_6X12)
                 .text_color(T::convert(UnifiedColor::White))
                 .build(),
-            thin_style: PrimitiveStyleBuilder::new()
+            style_black_thin: PrimitiveStyleBuilder::new()
                 .stroke_color(T::convert(UnifiedColor::Black))
                 .stroke_width(1)
                 .build(),
-            bold_style: PrimitiveStyleBuilder::new()
+            style_black_bold: PrimitiveStyleBuilder::new()
                 .stroke_color(T::convert(UnifiedColor::Black))
                 .stroke_width(2)
                 .build(),
-            red_bold_style: PrimitiveStyleBuilder::new()
+            style_chromatic_bold: PrimitiveStyleBuilder::new()
                 .stroke_color(T::convert(UnifiedColor::Chromatic))
                 .stroke_width(4)
                 .build(),
-            interval_style: PrimitiveStyleBuilder::new()
+            style_black_stroke_white_fill: PrimitiveStyleBuilder::new()
                 .stroke_color(T::convert(UnifiedColor::Black))
                 .stroke_width(2)
                 .fill_color(T::convert(UnifiedColor::White))
                 .build(),
-            radii: CornerRadiiBuilder::new().all(Size::new(10, 10)).build(),
+            radii_10x10: CornerRadiiBuilder::new().all(Size::new(10, 10)).build(),
             _phantom: PhantomData,
         })
     }
@@ -191,7 +191,7 @@ where
 
         // draw outer border
         Rectangle::new(self.top_left, self.size)
-            .into_styled(self.thin_style)
+            .into_styled(self.style_black_thin)
             .draw(display)?;
 
         // draw header line
@@ -199,7 +199,7 @@ where
             Point::new(component_left, self.top_left.y + header_height),
             Point::new(component_right, self.top_left.y + header_height),
         )
-        .into_styled(self.bold_style)
+        .into_styled(self.style_black_bold)
         .draw(display)?;
 
         // draw horizontal lines for each hour
@@ -209,7 +209,7 @@ where
                 Point::new(component_left, y),
                 Point::new(component_right, y),
             )
-            .into_styled(self.thin_style)
+            .into_styled(self.style_black_thin)
             .draw(display)?;
         }
 
@@ -218,7 +218,7 @@ where
             Point::new(content_left, component_top),
             Point::new(content_left, component_bottom),
         )
-        .into_styled(self.thin_style)
+        .into_styled(self.style_black_thin)
         .draw(display)?;
 
         // draw vertical lines for each date column
@@ -228,7 +228,7 @@ where
                 Point::new(x, component_top),
                 Point::new(x, component_bottom),
             )
-            .into_styled(self.thin_style)
+            .into_styled(self.style_black_thin)
             .draw(display)?;
         }
 
@@ -241,7 +241,7 @@ where
             Text::with_baseline(
                 TIME_COL_HEADER,
                 Point::new(x_pos, y_pos),
-                self.text_style_black,
+                self.text_black,
                 Baseline::Top,
             )
             .draw(display)?;
@@ -263,7 +263,7 @@ where
             Text::with_baseline(
                 &text,
                 Point::new(x_pos, y_pos),
-                self.text_style_black,
+                self.text_black,
                 Baseline::Top,
             )
             .draw(display)?;
@@ -285,7 +285,7 @@ where
             Text::with_baseline(
                 &text,
                 Point::new(x_pos, y_pos),
-                self.text_style_black,
+                self.text_black,
                 Baseline::Top,
             )
             .draw(display)?;
@@ -339,9 +339,9 @@ where
                     Point::new(col_x + 4, start_y + 4),
                     Size::new(date_col_width as u32 - 8, (end_y - start_y) as u32 - 8),
                 ),
-                self.radii,
+                self.radii_10x10,
             )
-            .into_styled(self.interval_style)
+            .into_styled(self.style_black_stroke_white_fill)
             .draw(display)?;
 
             if (end_y - start_y) >= FONT_HEIGHT {
@@ -351,7 +351,7 @@ where
                 Text::with_baseline(
                     interval.label,
                     Point::new(text_x, text_y),
-                    self.text_style_black,
+                    self.text_black,
                     Baseline::Middle,
                 )
                 .draw(display)?;
@@ -370,14 +370,14 @@ where
                 Text::with_baseline(
                     &start_time_str,
                     Point::new(start_time_x + offset.x, top_time_y + offset.y),
-                    self.text_small_style_white,
+                    self.text_small_white,
                     Baseline::Top,
                 )
                 .draw(display)?;
                 Text::with_baseline(
                     &end_time_str,
                     Point::new(end_time_x + offset.x, bottom_time_y + offset.y),
-                    self.text_small_style_white,
+                    self.text_small_white,
                     Baseline::Bottom,
                 )
                 .draw(display)?;
@@ -386,14 +386,14 @@ where
             Text::with_baseline(
                 &start_time_str,
                 Point::new(start_time_x, top_time_y),
-                self.text_small_style_black,
+                self.text_small_black,
                 Baseline::Top,
             )
             .draw(display)?;
             Text::with_baseline(
                 &end_time_str,
                 Point::new(end_time_x, bottom_time_y),
-                self.text_small_style_black,
+                self.text_small_black,
                 Baseline::Bottom,
             )
             .draw(display)?;
@@ -411,7 +411,7 @@ where
             Point::new(component_left, now_line_y),
             Point::new(line_end_x, now_line_y),
         )
-        .into_styled(self.red_bold_style)
+        .into_styled(self.style_chromatic_bold)
         .draw(display)?;
 
         Ok(())
