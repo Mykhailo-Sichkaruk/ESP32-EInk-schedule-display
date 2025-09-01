@@ -1,3 +1,6 @@
+use std::ops::RangeInclusive;
+
+use chrono::Duration;
 use embedded_graphics::prelude::*;
 
 use embedded_graphics_components::schedule_table_style::{Palette, ScheduleTableStyleBuilder};
@@ -180,37 +183,114 @@ fn main() -> anyhow::Result<()> {
         ),
     ];
 
-    let current_time =
-        chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap());
+    for current_time in ChronoRange::from(
+        chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+            ..=chrono::NaiveDateTime::new(
+                day_after_tomorrow,
+                chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
+            ),
+    )
+    .iter(Duration::minutes(15))
+    {
+        ScheduleTable::new(
+            Point::new(0, 0),
+            Size::new(display_width, display_height),
+            ScheduleTableStyleBuilder::new(Palette::new(
+                TriColor::Black,
+                TriColor::White,
+                TriColor::Chromatic,
+            ))
+            .build(),
+            current_time,
+            &time_intervals,
+            12,
+        )?
+        .draw(display.as_mut())?;
 
-    ScheduleTable::new(
-        Point::new(0, 0),
-        Size::new(display_width, display_height),
-        ScheduleTableStyleBuilder::new(Palette::new(
-            TriColor::Black,
-            TriColor::White,
-            TriColor::Chromatic,
-        ))
-        .build(),
-        current_time,
-        &time_intervals,
-        12,
-    )?
-    .draw(display.as_mut())?;
-
-    // // Draw battery indicator at the very bottom
-    // BatteryIndicator::new(
-    //     Point::new(0, 0),
-    //     Size::new(display_width, battery_bar_height),
-    // )
-    // .draw(display.as_mut(), battery_level_percent)?;
-
-    epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)?;
-
-    info!("Frame updated and displayed");
-
-    delay.delay_ms(1000);
-    epd.sleep(&mut spidd, &mut delay)?;
+        epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)?;
+        info!("Frame updated and displayed");
+        delay.delay_ms(1000);
+        epd.sleep(&mut spidd, &mut delay)?;
+    }
 
     Ok(())
+}
+
+// Utils
+
+#[derive(Debug, Clone)]
+pub struct ChronoRange<T> {
+    start: T,
+    end: T,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChronoRangeIter<T> {
+    step: chrono::Duration,
+    current: T,
+    end: T,
+}
+
+impl<T> Iterator for ChronoRangeIter<T>
+where
+    T: Copy + PartialOrd + std::ops::Add<chrono::Duration, Output = T>,
+{
+    type Item = T;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.current > self.end {
+            None
+        } else {
+            let next = self.current;
+            // Saturating add
+            let current = self.current + self.step;
+            if current < self.current {
+                return None;
+            } else {
+                self.current = current;
+            }
+            Some(next)
+        }
+    }
+}
+
+impl<T> ChronoRange<T>
+where
+    T: Copy + Clone,
+{
+    pub fn iter(&self, step: chrono::Duration) -> ChronoRangeIter<T> {
+        ChronoRangeIter {
+            current: self.start,
+            end: self.end,
+            step,
+        }
+    }
+
+    pub fn iter_days(&self) -> ChronoRangeIter<T> {
+        self.iter(Duration::days(1))
+    }
+
+    pub fn iter_hours(&self) -> ChronoRangeIter<T> {
+        self.iter(Duration::hours(1))
+    }
+
+    pub fn start(&self) -> &T {
+        &self.start
+    }
+
+    pub fn end(&self) -> &T {
+        &self.end
+    }
+}
+
+impl<T> From<RangeInclusive<T>> for ChronoRange<T>
+where
+    T: Copy,
+{
+    fn from(range: RangeInclusive<T>) -> Self {
+        ChronoRange {
+            start: *range.start(),
+            end: *range.end(),
+        }
+    }
 }

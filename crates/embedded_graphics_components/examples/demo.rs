@@ -38,30 +38,9 @@ fn main() -> anyhow::Result<()> {
     let mut display: SimulatorDisplay<Rgb565> = SimulatorDisplay::new(Size::new(480, 800));
     // let mut display: SimulatorDisplay<Rgb565> = SimulatorDisplay::new(Size::new(800, 480));
 
-    // // Simulate the drawing process
-    // display.set_rotation(epd_waveshare::prelude::DisplayRotation::Rotate90);
-
     // Get display dimensions for calculations
     let display_width = display.bounding_box().size.width;
     let display_height = display.bounding_box().size.height;
-
-    // --- ScheduleTable parameters ---
-    let header_height = 40;
-    let time_col_width = 80;
-    // Number of data rows: this now controls how many rows are allocated visually.
-    // Ensure this value is chosen such that `(display_height - header_height)` is divisible by `num_data_rows`
-    // to avoid rounding issues if you want perfect pixel alignment.
-    // For a 128px height display with 40px header, you have 88px left.
-    // 88 / 12 = 7.33, so 12 is problematic.
-    // Let's re-evaluate for clean division: if display_height is 128 and header_height is 40,
-    // we have 88px for rows.
-    // If you want to show, say, 11 hours (6 to 17), that's 11 rows. 88 / 11 = 8px per hour.
-    // If you want to show 12 hours (6 to 18), 88 / 12 = 7.33. Let's stick with 12 if you desire that range,
-    // and accept potential rounding that `embedded-graphics` handles.
-    // Or adjust range, or adjust header_height/total_height to make it divisible.
-    // For simplicity with given values, we'll keep num_data_rows = 12 as per original table height scaling.
-
-    let battery_bar_height: u32 = 10; // Высота полосы батареи внизу
 
     let today = chrono::NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
     let tomorrow = chrono::NaiveDate::from_ymd_opt(2025, 1, 2).unwrap();
@@ -202,7 +181,6 @@ fn main() -> anyhow::Result<()> {
 pub struct ChronoRange<T> {
     start: T,
     end: T,
-    inclusive: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -210,7 +188,6 @@ pub struct ChronoRangeIter<T> {
     step: chrono::Duration,
     current: T,
     end: T,
-    inclusive: bool,
 }
 
 impl<T> Iterator for ChronoRangeIter<T>
@@ -220,34 +197,18 @@ where
     type Item = T;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.inclusive {
-            if self.current > self.end {
-                None
-            } else {
-                let next = self.current;
-                // Saturating add
-                let current = self.current + self.step;
-                if current < self.current {
-                    return None;
-                } else {
-                    self.current = current;
-                }
-                Some(next)
-            }
+        if self.current > self.end {
+            None
         } else {
-            if self.current >= self.end {
-                None
+            let next = self.current;
+            // Saturating add
+            let current = self.current + self.step;
+            if current < self.current {
+                return None;
             } else {
-                let next = self.current;
-                // Saturating add
-                let current = self.current + self.step;
-                if current < self.current {
-                    return None;
-                } else {
-                    self.current = current;
-                }
-                Some(next)
+                self.current = current;
             }
+            Some(next)
         }
     }
 }
@@ -261,7 +222,6 @@ where
             current: self.start,
             end: self.end,
             step,
-            inclusive: self.inclusive,
         }
     }
 
@@ -290,20 +250,6 @@ where
         ChronoRange {
             start: *range.start(),
             end: *range.end(),
-            inclusive: true,
-        }
-    }
-}
-
-impl<T> From<Range<T>> for ChronoRange<T>
-where
-    T: Copy + Clone,
-{
-    fn from(range: Range<T>) -> Self {
-        ChronoRange {
-            start: range.start,
-            end: range.end,
-            inclusive: false,
         }
     }
 }

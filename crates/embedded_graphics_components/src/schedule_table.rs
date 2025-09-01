@@ -3,6 +3,7 @@ use std::ops::{Range, RangeInclusive};
 use chrono::{Duration, prelude::*};
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{Line, Rectangle, RoundedRectangle};
+use embedded_graphics::text::renderer::TextRenderer;
 use embedded_graphics::text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder};
 
 use crate::errors::{InvalidInterval, ScheduleTableError};
@@ -138,6 +139,7 @@ where
         let content_left = self.top_left.x + time_col_width;
 
         let body_font_height = self.style.text_body.font.character_size.height as i32;
+        let body_font_width = self.style.text_body.font.character_size.width as i32;
 
         // draw outer border
         Rectangle::new(self.top_left, self.size)
@@ -301,12 +303,22 @@ where
             .into_styled(self.style.interval_box)
             .draw(display)?;
 
-            if (end_y - start_y) >= body_font_height {
-                let text_x = col_x + (date_col_width / 2);
-                let text_y = start_y + (end_y - start_y) / 2;
+            // let max_text_len =
+            //     (date_col_width - self.style.interval_box_margin * 2) / body_font_width;
+
+            let text_pos = Point::new(
+                col_x + (date_col_width / 2),
+                start_y + (end_y - start_y) / 2,
+            );
+            let text_mes =
+                self.style
+                    .text_body
+                    .measure_string(interval.label, text_pos, Baseline::Middle);
+
+            if (end_y - start_y) >= text_mes.bounding_box.size.height as i32 {
                 Text::with_text_style(
                     interval.label,
-                    Point::new(text_x, text_y),
+                    text_pos,
                     self.style.text_body,
                     TextStyleBuilder::new()
                         .alignment(Alignment::Center)
