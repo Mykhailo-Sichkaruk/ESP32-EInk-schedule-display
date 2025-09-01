@@ -43,6 +43,7 @@ tinybmp = "0.6.0"
 
 
 embedded_graphics_components = { path = "crates/embedded_graphics_components" }
+chrono = "0.4.41"
 
 # --- Optional Embassy Integration ---
 # esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
