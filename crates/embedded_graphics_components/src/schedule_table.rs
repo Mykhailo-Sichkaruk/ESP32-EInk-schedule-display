@@ -51,8 +51,9 @@ where
         style: ScheduleTableStyle<'a, C>,
         current_time: NaiveDateTime,
         time_intervals: &'a [TimeInterval<'a>],
-        hours_to_show: i32,
+        hours_to_show: u32,
     ) -> Result<Self, ScheduleTableError> {
+        let hours_to_show = hours_to_show as i32;
         let (first_date, last_date) = time_intervals
             .iter()
             .filter(|i| i.start.date() >= current_time.date())

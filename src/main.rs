@@ -5,6 +5,7 @@ use embedded_graphics::prelude::*;
 
 use embedded_graphics_components::schedule_table_style::{Palette, ScheduleTableStyleBuilder};
 use embedded_graphics_components::unified_color::{IntoPixelColorConverter, UnifiedColor};
+use epd_waveshare::color::Color as DuoColor;
 use epd_waveshare::color::TriColor;
 #[cfg(feature = "wokwi")]
 use epd_waveshare::epd2in9_v2::{Display2in9 as Display, Epd2in9 as Epd};
@@ -12,7 +13,6 @@ use epd_waveshare::epd2in9_v2::{Display2in9 as Display, Epd2in9 as Epd};
 use epd_waveshare::epd7in5b_v3::{Display7in5 as Display, Epd7in5 as Epd};
 use epd_waveshare::prelude::WaveshareDisplay;
 
-use embedded_graphics_components::battery_indicator::BatteryIndicator;
 use embedded_graphics_components::schedule_table::{ScheduleTable, TimeInterval};
 use esp_backtrace as _;
 use esp_eink_schedule::epd_pins::{self, EpdHardwarePins};
@@ -23,21 +23,17 @@ use esp_idf_hal::spi;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use log::info;
 
-struct Converter;
-
-impl IntoPixelColorConverter for Converter {
-    type Output = TriColor;
-
-    fn convert(color: UnifiedColor) -> Self::Output {
-        match color {
-            UnifiedColor::Black => TriColor::Black,
-            UnifiedColor::White => TriColor::White,
-            UnifiedColor::Chromatic => TriColor::Chromatic,
-        }
-    }
-}
+#[cfg(not(feature = "wokwi"))]
+const hours_to_show: u32 = 12;
+#[cfg(feature = "wokwi")]
+const hours_to_show: u32 = 5;
 
 fn main() -> anyhow::Result<()> {
+    #[cfg(not(feature = "wokwi"))]
+    let palette = Palette::new(TriColor::Black, TriColor::White, TriColor::Chromatic);
+    #[cfg(feature = "wokwi")]
+    let palette = Palette::new(DuoColor::Black, DuoColor::White, DuoColor::Black);
+
     esp_idf_sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
     let _nvs = EspDefaultNvsPartition::take()?;
@@ -190,27 +186,22 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
             ),
     )
-    .iter(Duration::minutes(15))
+    // .iter(Duration::minutes(15))
+    .iter(Duration::hours(1))
     {
         ScheduleTable::new(
             Point::new(0, 0),
             Size::new(display_width, display_height),
-            ScheduleTableStyleBuilder::new(Palette::new(
-                TriColor::Black,
-                TriColor::White,
-                TriColor::Chromatic,
-            ))
-            .build(),
+            ScheduleTableStyleBuilder::new(palette).build(),
             current_time,
             &time_intervals,
-            12,
+            hours_to_show,
         )?
         .draw(display.as_mut())?;
 
         epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)?;
         info!("Frame updated and displayed");
-        delay.delay_ms(1000);
-        epd.sleep(&mut spidd, &mut delay)?;
+        delay.delay_ms(100);
     }
 
     Ok(())
