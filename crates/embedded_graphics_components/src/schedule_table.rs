@@ -1,10 +1,8 @@
-use std::ops::{Range, RangeInclusive};
-
 use chrono::{Duration, prelude::*};
 use embedded_graphics::prelude::*;
 use embedded_graphics::primitives::{Line, Rectangle, RoundedRectangle};
 use embedded_graphics::text::renderer::TextRenderer;
-use embedded_graphics::text::{Alignment, Baseline, Text, TextStyle, TextStyleBuilder};
+use embedded_graphics::text::{Alignment, Baseline, Text, TextStyleBuilder};
 
 use crate::errors::{InvalidInterval, ScheduleTableError};
 use crate::schedule_table_style::ScheduleTableStyle;
@@ -81,17 +79,10 @@ where
         // clamp window to [0, 23]
         let clamped_start_hour = (current_hour - half_window_hours).max(0)
             + -(current_hour + half_window_hours - 24).max(0);
-        let clamped_end_hour =
-            (current_hour + half_window_hours).min(23) + -(current_hour - half_window_hours).min(0);
 
         // minutes become 00 by construction
         let start_of_window = current_time.date().and_time(
             chrono::NaiveTime::from_hms_opt(clamped_start_hour as u32, 0, 0)
-                .expect("Failed to create NaiveTime"),
-        );
-
-        let end_of_window = current_time.date().and_time(
-            chrono::NaiveTime::from_hms_opt(clamped_end_hour as u32, 0, 0)
                 .expect("Failed to create NaiveTime"),
         );
 
@@ -140,7 +131,6 @@ where
         let content_left = self.top_left.x + time_col_width;
 
         let body_font_height = self.style.text_body.font.character_size.height as i32;
-        let body_font_width = self.style.text_body.font.character_size.width as i32;
 
         // draw outer border
         Rectangle::new(self.top_left, self.size)

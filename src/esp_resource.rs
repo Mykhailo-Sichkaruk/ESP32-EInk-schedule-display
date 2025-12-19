@@ -2,9 +2,7 @@ use esp_idf_hal::{
     gpio::{AnyInputPin, AnyOutputPin}, modem::Modem, peripherals::Peripherals, spi::SPI3
 };
 use log::info;
-use esp_idf_svc::{eventloop::EspSystemEventLoop};
-
-use crate::epd::epd_start_render_text;
+use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::{EspDefaultNvsPartition, EspNvsPartition, NvsDefault}};
 
 pub struct EpdHardwarePins {
     pub spi: SPI3,
@@ -21,8 +19,8 @@ pub struct NetParts {
     pub modem: Modem,
     pub sysloop: EspSystemEventLoop,
 }
-/// Retrieves the hardware pins for the EPD display.
-pub fn get_pins() -> anyhow::Result<(EpdHardwarePins, NetParts)> {
+
+pub fn get() -> anyhow::Result<(EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>)> {
     let peripherals = Peripherals::take()?;
 
     let modem = peripherals.modem;
@@ -63,5 +61,7 @@ pub fn get_pins() -> anyhow::Result<(EpdHardwarePins, NetParts)> {
         sysloop,
     };
 
-    Ok((epd, net_parts))
+    let nvs = EspDefaultNvsPartition::take()?;
+
+    Ok((epd, net_parts, nvs))
 }

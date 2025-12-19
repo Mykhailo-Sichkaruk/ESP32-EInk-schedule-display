@@ -9,33 +9,31 @@ use esp_idf_svc::{
 };
 use log::{error, info};
 
-use crate::epd_pins::NetParts;
+use crate::esp_resource::NetParts;
 
 #[toml_cfg::toml_config]
 pub struct Config {
     #[default("")]
-    ssid: &'static str,
+    wifi_ssid: &'static str,
     #[default("")]
-    pass: &'static str,
+    wifi_psk: &'static str,
+    #[default("")]
+    server_url: &'static str,
 }
 
-// const SSID: &str = "Mi 9 SE";
-// const PASS: &str = "14881488";
-
-pub fn request_update(NetParts { modem, sysloop }: NetParts, nvs: EspDefaultNvsPartition) -> anyhow::Result<String> {
+pub fn connect_wifi(NetParts { modem, sysloop }: NetParts, nvs: EspDefaultNvsPartition) -> anyhow::Result<()> {
     let mut wifi = BlockingWifi::wrap(
-        // TODO: handle wifi connection error
         EspWifi::new(modem, sysloop.clone(), Some(nvs))?,
         sysloop,
     )?;
 
     let wifi_configuration: WifiConfiguration = WifiConfiguration::Client(ClientConfiguration {
-        ssid: CONFIG.ssid
+        ssid: CONFIG.wifi_ssid
             .try_into()
             .expect("Could not parse the given SSID into WiFi config"),
         bssid: None,
         auth_method: AuthMethod::WPA2Personal,
-        password: CONFIG.pass
+        password: CONFIG.wifi_psk
             .try_into()
             .expect("Could not parse the given password into WiFi config"),
         channel: None,
@@ -45,8 +43,12 @@ pub fn request_update(NetParts { modem, sysloop }: NetParts, nvs: EspDefaultNvsP
     wifi.start()?;
     wifi.connect()?;
     wifi.wait_netif_up()?;
-    info!("Wifi connected");
 
+    info!("Wifi connected");
+    Ok(())
+}
+
+pub fn fetch_schedule() -> anyhow::Result<String> {
     let connection = EspHttpConnection::new(&Configuration {
         use_global_ca_store: true,
         crt_bundle_attach: Some(esp_idf_svc::sys::esp_crt_bundle_attach),
@@ -54,14 +56,20 @@ pub fn request_update(NetParts { modem, sysloop }: NetParts, nvs: EspDefaultNvsP
     })?;
     let mut client = HttpClient::wrap(connection);
     let headers = [("accept", "application/json")];
-    let request = client.request(Method::Get, "http://10.13.83.77:8080", &headers)?;
+    let request = client.request(Method::Get, CONFIG.server_url, &headers)?;
     let mut response = request.submit()?;
     let status = response.status();
-    info!("Response status: {}", status);
+    match status {
+        200..=299 => info!("Request successful"),
+        _ => {
+            error!("Request failed with status code: {}", status);
+            return Err(anyhow::anyhow!("Request failed with status code: {}", status));
+        }
+    }
     let mut bytes = [0; 1024]; // Buffer size of 1024 bytes
-    let readBytes = response.read(&mut bytes)?;
+    let read_bytes = response.read(&mut bytes)?;
     info!("Read {} bytes", bytes.len());
-    let body = String::from_utf8(bytes[0..readBytes].to_vec());
+    let body = String::from_utf8(bytes[0..read_bytes].to_vec());
     info!("Response body: {:?}", body);
 
     if body.is_err() {
@@ -70,4 +78,9 @@ pub fn request_update(NetParts { modem, sysloop }: NetParts, nvs: EspDefaultNvsP
     }
 
     Ok(body?)
+}
+
+pub fn post_error() -> anyhow::Result<()> {
+    // Placeholder for posting error back to server
+    Ok(())
 }

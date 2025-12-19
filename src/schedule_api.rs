@@ -1,4 +1,4 @@
-use chrono::NaiveDateTime;
+use chrono::{NaiveDateTime};
 use embedded_graphics_components::schedule_table::TimeInterval;
 use serde::Deserialize;
 use std::error::Error;

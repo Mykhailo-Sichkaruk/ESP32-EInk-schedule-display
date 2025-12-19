@@ -1,4 +1,6 @@
+// import https from "node:https";
 import http from "node:http";
+import fs from "node:fs";
 import { faker } from "@faker-js/faker";
 
 const PORT = 8080;
@@ -34,6 +36,15 @@ const requestListener = (req, res) => {
   res.end(JSON.stringify(getResult()));
 };
 
+// const options = {
+//   key: fs.readFileSync("./certs/localhost-key.pem"),
+//   cert: fs.readFileSync("./certs/localhost.pem"),
+// };
+//
+// https.createServer(options, requestListener).listen(PORT, "0.0.0.0", () => {
+//   console.log(`Server is running on https://0.0.0.0:${PORT}`);
+// });
+//
 http.createServer(requestListener).listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on http://0.0.0.0:${PORT}`);
 });
