@@ -24,6 +24,7 @@
             pkgs.stdenv.cc.cc.lib
             pkgs.libxml2
             pkgs.libz
+            pkgs.SDL2
           ];
           NIX_LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
             pkgs.libclang

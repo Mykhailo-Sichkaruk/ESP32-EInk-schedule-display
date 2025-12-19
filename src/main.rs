@@ -4,7 +4,6 @@ use chrono::Duration;
 use embedded_graphics::prelude::*;
 
 use embedded_graphics_components::schedule_table_style::{Palette, ScheduleTableStyleBuilder};
-use embedded_graphics_components::unified_color::{IntoPixelColorConverter, UnifiedColor};
 use epd_waveshare::color::Color as DuoColor;
 use epd_waveshare::color::TriColor;
 #[cfg(feature = "wokwi")]
@@ -13,9 +12,11 @@ use epd_waveshare::epd2in9_v2::{Display2in9 as Display, Epd2in9 as Epd};
 use epd_waveshare::epd7in5b_v3::{Display7in5 as Display, Epd7in5 as Epd};
 use epd_waveshare::prelude::WaveshareDisplay;
 
-use embedded_graphics_components::schedule_table::{ScheduleTable, TimeInterval};
+use embedded_graphics_components::schedule_table::ScheduleTable;
 use esp_backtrace as _;
 use esp_eink_schedule::epd_pins::{self, EpdHardwarePins};
+use esp_eink_schedule::schedule_api;
+use esp_eink_schedule::wifilib;
 use esp_idf_hal::delay::Delay;
 use esp_idf_hal::gpio::{self, PinDriver};
 use esp_idf_hal::prelude::*;
@@ -36,12 +37,11 @@ fn main() -> anyhow::Result<()> {
 
     esp_idf_sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
-    let _nvs = EspDefaultNvsPartition::take()?;
+    let nvs = EspDefaultNvsPartition::take()?;
 
     info!("Starting EPD example");
 
-    let (epd_pins, _net) = epd_pins::get_pins()?;
-
+    let (epd_pins, net) = epd_pins::get_pins()?;
     let EpdHardwarePins {
         spi,
         sclk,
@@ -52,7 +52,7 @@ fn main() -> anyhow::Result<()> {
         dc,
         pwr,
     }: EpdHardwarePins = epd_pins;
-
+    let result = wifilib::request_update(net, nvs)?;
     let mut pwr = PinDriver::output(pwr)?;
     pwr.set_high()?;
 
@@ -86,202 +86,34 @@ fn main() -> anyhow::Result<()> {
     let display_width = display.bounding_box().size.width;
     let display_height = display.bounding_box().size.height;
 
-    let today = chrono::NaiveDate::from_ymd_opt(2025, 1, 1).unwrap();
-    let tomorrow = chrono::NaiveDate::from_ymd_opt(2025, 1, 2).unwrap();
-    let day_after_tomorrow = chrono::NaiveDate::from_ymd_opt(2025, 1, 3).unwrap();
+    let schedule = schedule_api::parse_schedule(&result)?;
+    let time_intervals = schedule.time_intervals();
+    let current_time = schedule.current_time;
 
-    let time_intervals = vec![
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap()),
-            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(12, 15, 0).unwrap()),
-            "xsichkaruk",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(12, 30, 0).unwrap()),
-            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()),
-            "xchaban",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(
-                tomorrow,
-                chrono::NaiveTime::from_hms_opt(10, 15, 0).unwrap(),
-            ),
-            chrono::NaiveDateTime::new(
-                tomorrow,
-                chrono::NaiveTime::from_hms_opt(10, 45, 0).unwrap(),
-            ),
-            "xchaban",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(
-                tomorrow,
-                chrono::NaiveTime::from_hms_opt(11, 30, 0).unwrap(),
-            ),
-            chrono::NaiveDateTime::new(
-                tomorrow,
-                chrono::NaiveTime::from_hms_opt(13, 15, 0).unwrap(),
-            ),
-            "xtodorov",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(
-                tomorrow,
-                chrono::NaiveTime::from_hms_opt(13, 30, 0).unwrap(),
-            ),
-            chrono::NaiveDateTime::new(
-                tomorrow,
-                chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
-            ),
-            "xchaban",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(
-                day_after_tomorrow,
-                chrono::NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
-            ),
-            chrono::NaiveDateTime::new(
-                day_after_tomorrow,
-                chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
-            ),
-            "xchaban",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(
-                day_after_tomorrow,
-                chrono::NaiveTime::from_hms_opt(12, 15, 0).unwrap(),
-            ),
-            chrono::NaiveDateTime::new(
-                day_after_tomorrow,
-                chrono::NaiveTime::from_hms_opt(14, 30, 0).unwrap(),
-            ),
-            "xchaban",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(
-                day_after_tomorrow,
-                chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
-            ),
-            chrono::NaiveDateTime::new(
-                day_after_tomorrow,
-                chrono::NaiveTime::from_hms_opt(16, 0, 0).unwrap(),
-            ),
-            "xchaban",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(17, 0, 0).unwrap()),
-            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(17, 15, 0).unwrap()),
-            "xchaban",
-        ),
-        TimeInterval::new(
-            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(22, 15, 0).unwrap()),
-            chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(23, 59, 59).unwrap()),
-            "xchaban",
-        ),
-    ];
+    ScheduleTable::new(
+        Point::new(0, 0),
+        Size::new(display_width, display_height),
+        ScheduleTableStyleBuilder::new(palette).build(),
+        current_time,
+        &time_intervals,
+        hours_to_show,
+    )?
+    .draw(display.as_mut())?;
 
-    for current_time in ChronoRange::from(
-        chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(0, 0, 0).unwrap())
-            ..=chrono::NaiveDateTime::new(
-                day_after_tomorrow,
-                chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
-            ),
-    )
-    // .iter(Duration::minutes(15))
-    .iter(Duration::hours(1))
-    {
-        ScheduleTable::new(
-            Point::new(0, 0),
-            Size::new(display_width, display_height),
-            ScheduleTableStyleBuilder::new(palette).build(),
-            current_time,
-            &time_intervals,
-            hours_to_show,
-        )?
-        .draw(display.as_mut())?;
+    epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)?;
+    info!("Frame updated and displayed");
+    delay.delay_ms(1000);
 
-        epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)?;
-        info!("Frame updated and displayed");
-        delay.delay_ms(100);
+    epd.sleep(&mut spidd, &mut delay)?;
+
+    const SLEEP_SECS: u64 = 30;
+    info!("Going to deep sleep for {SLEEP_SECS} seconds...");
+
+    unsafe {
+        esp_idf_sys::esp_sleep_enable_timer_wakeup(SLEEP_SECS * 1_000_000);
+        esp_idf_sys::esp_deep_sleep_start();
     }
 
     Ok(())
 }
 
-// Utils
-
-#[derive(Debug, Clone)]
-pub struct ChronoRange<T> {
-    start: T,
-    end: T,
-}
-
-#[derive(Debug, Clone)]
-pub struct ChronoRangeIter<T> {
-    step: chrono::Duration,
-    current: T,
-    end: T,
-}
-
-impl<T> Iterator for ChronoRangeIter<T>
-where
-    T: Copy + PartialOrd + std::ops::Add<chrono::Duration, Output = T>,
-{
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.current > self.end {
-            None
-        } else {
-            let next = self.current;
-            // Saturating add
-            let current = self.current + self.step;
-            if current < self.current {
-                return None;
-            } else {
-                self.current = current;
-            }
-            Some(next)
-        }
-    }
-}
-
-impl<T> ChronoRange<T>
-where
-    T: Copy + Clone,
-{
-    pub fn iter(&self, step: chrono::Duration) -> ChronoRangeIter<T> {
-        ChronoRangeIter {
-            current: self.start,
-            end: self.end,
-            step,
-        }
-    }
-
-    pub fn iter_days(&self) -> ChronoRangeIter<T> {
-        self.iter(Duration::days(1))
-    }
-
-    pub fn iter_hours(&self) -> ChronoRangeIter<T> {
-        self.iter(Duration::hours(1))
-    }
-
-    pub fn start(&self) -> &T {
-        &self.start
-    }
-
-    pub fn end(&self) -> &T {
-        &self.end
-    }
-}
-
-impl<T> From<RangeInclusive<T>> for ChronoRange<T>
-where
-    T: Copy,
-{
-    fn from(range: RangeInclusive<T>) -> Self {
-        ChronoRange {
-            start: *range.start(),
-            end: *range.end(),
-        }
-    }
-}
