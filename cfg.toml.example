@@ -1,3 +1,6 @@
-[http-client]
-wifi_ssid = "FBI Surveillance Van"
-wifi_psk = "hunter2"
+[esp-eink-schedule]
+wifi_ssid = "Mi 9 SE"
+wifi_psk = ""
+server_url = "http://HOST:PORT"
+device_mac = "00:00:00:00:00:00"
+sleep_time_secs = 30
