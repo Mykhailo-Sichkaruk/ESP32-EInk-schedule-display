@@ -36,31 +36,31 @@ pub struct ScheduleTableStyle<'a, C>
 where
     C: PixelColor,
 {
-    /// Стиль текста для основного содержимого
+    /// Main text style
     pub text_body: MonoTextStyle<'a, C>,
-    /// Стиль текста для небольших элементов
+    /// Small text style
     pub text_small: MonoTextStyle<'a, C>,
-    /// Стиль текста для теней небольших элементов
+    /// Small text shadow style
     pub text_small_shadow: Option<(
         MonoTextStyle<'a, C>,
         RangeInclusive<i32>,
         RangeInclusive<i32>,
     )>,
-    /// Стиль линий сетки
+    /// Grid line style
     pub grid_line: PrimitiveStyle<C>,
-    /// Стиль линий заголовка
+    /// Header line style
     pub header_line: PrimitiveStyle<C>,
-    /// Стиль контейнера для интервалов
+    /// Interval box style
     pub interval_box: PrimitiveStyle<C>,
-    /// Радиусы скругления контейнера для интервалов
+    /// Interval box corner radii
     pub interval_box_radii: CornerRadii,
-    /// Отступы контейнера для интервалов
+    /// Interval box margin
     pub interval_box_margin: i32,
-    /// Стиль линий времени
+    /// Time line style
     pub time_line: PrimitiveStyle<C>,
-    /// Стиль заливки всего виджета перед началом рендера
+    /// Background style for the entire widget before rendering
     pub background: PrimitiveStyle<C>,
-    /// Стиль обводки виджета
+    /// Border style for the widget
     pub border: PrimitiveStyle<C>,
 }
 
