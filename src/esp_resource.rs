@@ -25,7 +25,7 @@ pub struct NetParts {
     pub sysloop: EspSystemEventLoop,
 }
 
-pub fn get() -> Result<(EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>), anyhow::Error> {
+pub fn get() -> (EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>) {
     let peripherals = Peripherals::take().expect("Failed to take peripherals");
 
     let modem = peripherals.modem;
@@ -53,6 +53,5 @@ pub fn get() -> Result<(EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>),
 
     let nvs = EspDefaultNvsPartition::take().expect("Failed to take default NVS partition");
 
-    // (epd, net_parts, nvs)
-    Ok((epd, net_parts, nvs))
+    (epd, net_parts, nvs)
 }

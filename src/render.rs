@@ -18,16 +18,17 @@ use log::info;
 
 use epd_waveshare::epd7in5b_v3::{Display7in5 as Display, Epd7in5 as Epd};
 
+use crate::app_error::AppError;
+use crate::esp_resource::EpdHardwarePins;
+use crate::schedule_api::Response;
+
 const HOURS_TO_SHOW: u32 = 12;
 
 const ERROR_LINES: i32 = 2;
 const ERROR_PADDING: i32 = 4;
 const ERROR_HELP_TEXT: &str = "Please contact Ynet members";
 
-use crate::esp_resource::EpdHardwarePins;
-use crate::schedule_api::Response;
-
-pub fn render_schedule(epd_pins: EpdHardwarePins, response: Response) -> anyhow::Result<()> {
+pub fn render_schedule(epd_pins: EpdHardwarePins, response: Response) -> Result<(), AppError> {
     let palette = Palette::new(TriColor::Black, TriColor::White, TriColor::Chromatic);
 
     let EpdHardwarePins {
@@ -40,8 +41,8 @@ pub fn render_schedule(epd_pins: EpdHardwarePins, response: Response) -> anyhow:
         dc,
         pwr,
     }: EpdHardwarePins = epd_pins;
-    let mut pwr = PinDriver::output(pwr)?;
-    pwr.set_high()?;
+    let mut pwr = PinDriver::output(pwr).map_err(|_| AppError::GpioPinConfigFailed)?;
+    pwr.set_high().map_err(|_| AppError::GpioPinConfigFailed)?;
     let mut spidd = spi::SpiDeviceDriver::new_single(
         spi,
         sclk,
@@ -50,19 +51,19 @@ pub fn render_schedule(epd_pins: EpdHardwarePins, response: Response) -> anyhow:
         Some(cs),
         &spi::config::DriverConfig::new(),
         &spi::config::Config::new().baudrate(115200.Hz()),
-    )?;
+    )
+    .map_err(|_| AppError::SpiDriverCreationFailed)?;
     let mut delay = Delay::new(100);
 
-    let mut epd = Epd::new(
-        &mut spidd,
-        PinDriver::input(busy_in)?,
-        PinDriver::output(dc)?,
-        PinDriver::output(rst)?,
-        &mut delay,
-        None,
-    )?;
+    let busy_pin = PinDriver::input(busy_in).map_err(|_| AppError::GpioPinConfigFailed)?;
+    let dc_pin = PinDriver::output(dc).map_err(|_| AppError::GpioPinConfigFailed)?;
+    let rst_pin = PinDriver::output(rst).map_err(|_| AppError::GpioPinConfigFailed)?;
 
-    epd.wake_up(&mut spidd, &mut delay)?;
+    let mut epd = Epd::new(&mut spidd, busy_pin, dc_pin, rst_pin, &mut delay, None)
+        .map_err(|_| AppError::EpdInitFailed)?;
+
+    epd.wake_up(&mut spidd, &mut delay)
+        .map_err(|_| AppError::EpdWakeUpFailed)?;
 
     let mut display = Box::new(Display::default());
     display.set_rotation(epd_waveshare::prelude::DisplayRotation::Rotate90);
@@ -76,7 +77,8 @@ pub fn render_schedule(epd_pins: EpdHardwarePins, response: Response) -> anyhow:
         .events
         .iter()
         .map(|event| TimeInterval::new(event.start_unix, event.end_unix, &event.label))
-        .collect::<Result<Vec<TimeInterval>, _>>()?;
+        .collect::<Result<Vec<TimeInterval>, _>>()
+        .map_err(|_| AppError::InvalidTimeInterval)?;
 
     let current_time = response.system.server_time_unix;
 
@@ -87,17 +89,21 @@ pub fn render_schedule(epd_pins: EpdHardwarePins, response: Response) -> anyhow:
         current_time,
         &time_intervals,
         HOURS_TO_SHOW,
-    )?
-    .draw(display.as_mut())?;
+    )
+    .map_err(|_| AppError::ScheduleTableCreationFailed)?
+    .draw(display.as_mut())
+    .map_err(|_| AppError::DrawFailed)?;
 
-    epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)?;
+    epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)
+        .map_err(|_| AppError::EpdUpdateFrameFailed)?;
     info!("Frame updated and displayed");
     delay.delay_ms(1000);
-    epd.sleep(&mut spidd, &mut delay)?;
+    epd.sleep(&mut spidd, &mut delay)
+        .map_err(|_| AppError::EpdSleepFailed)?;
     Ok(())
 }
 
-pub fn render_error(epd_pins: EpdHardwarePins, message: &str) -> anyhow::Result<()> {
+pub fn render_error(epd_pins: EpdHardwarePins, message: &str) -> Result<(), AppError> {
     let palette = Palette::new(TriColor::Black, TriColor::White, TriColor::Chromatic);
 
     let EpdHardwarePins {
@@ -110,8 +116,8 @@ pub fn render_error(epd_pins: EpdHardwarePins, message: &str) -> anyhow::Result<
         dc,
         pwr,
     }: EpdHardwarePins = epd_pins;
-    let mut pwr = PinDriver::output(pwr)?;
-    pwr.set_high()?;
+    let mut pwr = PinDriver::output(pwr).map_err(|_| AppError::GpioPinConfigFailed)?;
+    pwr.set_high().map_err(|_| AppError::GpioPinConfigFailed)?;
     let mut spidd = spi::SpiDeviceDriver::new_single(
         spi,
         sclk,
@@ -120,19 +126,19 @@ pub fn render_error(epd_pins: EpdHardwarePins, message: &str) -> anyhow::Result<
         Some(cs),
         &spi::config::DriverConfig::new(),
         &spi::config::Config::new().baudrate(115200.Hz()),
-    )?;
+    )
+    .map_err(|_| AppError::SpiDriverCreationFailed)?;
     let mut delay = Delay::new(100);
 
-    let mut epd = Epd::new(
-        &mut spidd,
-        PinDriver::input(busy_in)?,
-        PinDriver::output(dc)?,
-        PinDriver::output(rst)?,
-        &mut delay,
-        None,
-    )?;
+    let busy_pin = PinDriver::input(busy_in).map_err(|_| AppError::GpioPinConfigFailed)?;
+    let dc_pin = PinDriver::output(dc).map_err(|_| AppError::GpioPinConfigFailed)?;
+    let rst_pin = PinDriver::output(rst).map_err(|_| AppError::GpioPinConfigFailed)?;
 
-    epd.wake_up(&mut spidd, &mut delay)?;
+    let mut epd = Epd::new(&mut spidd, busy_pin, dc_pin, rst_pin, &mut delay, None)
+        .map_err(|_| AppError::EpdInitFailed)?;
+
+    epd.wake_up(&mut spidd, &mut delay)
+        .map_err(|_| AppError::EpdWakeUpFailed)?;
 
     let mut display = Box::new(Display::default());
     display.set_rotation(epd_waveshare::prelude::DisplayRotation::Rotate90);
@@ -163,12 +169,16 @@ pub fn render_error(epd_pins: EpdHardwarePins, message: &str) -> anyhow::Result<
             .build(),
         ERROR_PADDING,
     );
-    banner.draw(display.as_mut(), &line1, &line2)?;
+    banner
+        .draw(display.as_mut(), &line1, &line2)
+        .map_err(|_| AppError::DrawFailed)?;
 
-    epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)?;
+    epd.update_and_display_frame(&mut spidd, display.buffer(), &mut delay)
+        .map_err(|_| AppError::EpdUpdateFrameFailed)?;
     info!("Error frame updated and displayed");
     delay.delay_ms(1000);
-    epd.sleep(&mut spidd, &mut delay)?;
+    epd.sleep(&mut spidd, &mut delay)
+        .map_err(|_| AppError::EpdSleepFailed)?;
     Ok(())
 }
 

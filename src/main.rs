@@ -2,7 +2,7 @@ use esp_backtrace as _;
 use esp_eink_schedule::{
     app_error::AppError,
     esp_resource, render,
-    schedule_api::{self, Response},
+    schedule_api::Response,
     wifilib,
 };
 use log::{error, info, warn};
@@ -19,7 +19,7 @@ pub struct Config {
     sleep_time_secs: u64,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() {
     esp_idf_sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
 
@@ -45,28 +45,23 @@ struct AppContext {
 }
 
 fn run_cycle(ctx: &mut AppContext) -> Result<(), AppError> {
-    let (epd_pins, net, nvs) = esp_resource::get().map_err(AppError::Init)?;
+    let (epd_pins, net, nvs) = esp_resource::get();
     ctx.epd_pins = Some(epd_pins);
 
-    let wifi = wifilib::WifiClient::new(net, nvs).map_err(AppError::WifiInit)?;
+    let wifi = wifilib::WifiClient::new(net, nvs)?;
     ctx.wifi = Some(wifi);
 
     let schedule_json = ctx
         .wifi
         .as_mut()
-        .ok_or_else(|| AppError::WifiConnect(anyhow::anyhow!("wifi not initialized")))?
-        .fetch_schedule()
-        .map_err(AppError::FetchSchedule)?;
-    // let schedule = schedule_api::parse_schedule(&schedule_json).map_err(AppError::ParseSchedule)?;
-    let response: Response = serde_json::from_str(&schedule_json)
-        .map_err(anyhow::Error::from)
-        .map_err(AppError::ParseSchedule)?;
+        .expect("wifi not initialized")
+        .fetch_schedule()?;
 
-    let epd_pins = ctx
-        .epd_pins
-        .take()
-        .ok_or_else(|| AppError::Render(anyhow::anyhow!("epd pins not initialized")))?;
-    render::render_schedule(epd_pins, response).map_err(AppError::Render)?;
+    let response: Response =
+        serde_json::from_str(&schedule_json).map_err(|_| AppError::JsonDeserializationFailed)?;
+
+    let epd_pins = ctx.epd_pins.take().expect("epd pins not initialized");
+    render::render_schedule(epd_pins, response)?;
 
     Ok(())
 }

@@ -34,26 +34,24 @@ impl WifiClient {
     pub fn new(
         NetParts { modem, sysloop }: NetParts,
         nvs: EspDefaultNvsPartition,
-    ) -> Result<Self, anyhow::Error> {
-        let wifi = BlockingWifi::wrap(
-            EspWifi::new(modem, sysloop.clone(), Some(nvs))
-                .map_err(|error| AppError::WifiInit(anyhow::anyhow!(error.to_string())))?,
-            sysloop,
-        )
-        .map_err(|error| AppError::WifiInit(anyhow::anyhow!(error.to_string())))?;
+    ) -> Result<Self, AppError> {
+        let esp_wifi = EspWifi::new(modem, sysloop.clone(), Some(nvs))
+            .map_err(|_| AppError::WifiDriverCreationFailed)?;
+
+        let wifi = BlockingWifi::wrap(esp_wifi, sysloop).map_err(|_| AppError::WifiWrapFailed)?;
 
         Ok(Self { wifi })
     }
 
-    pub fn connect(&mut self) -> anyhow::Result<()> {
+    pub fn connect(&mut self) -> Result<(), AppError> {
         let ssid = CONFIG
             .wifi_ssid
             .try_into()
-            .map_err(|_| anyhow::anyhow!("invalid wifi_ssid"))?;
+            .map_err(|_| AppError::InvalidWifiSsid)?;
         let password = CONFIG
             .wifi_psk
             .try_into()
-            .map_err(|_| anyhow::anyhow!("invalid wifi_psk"))?;
+            .map_err(|_| AppError::InvalidWifiPassword)?;
 
         let wifi_configuration: WifiConfiguration =
             WifiConfiguration::Client(ClientConfiguration {
@@ -67,21 +65,19 @@ impl WifiClient {
 
         self.wifi
             .set_configuration(&wifi_configuration)
-            .map_err(|error| anyhow::anyhow!("Wifi configuration error, {}", error))?;
-        self.wifi
-            .start()
-            .map_err(|error| anyhow::anyhow!("Wifi start error, {}", error))?;
+            .map_err(|_| AppError::WifiConfigurationFailed)?;
+        self.wifi.start().map_err(|_| AppError::WifiStartFailed)?;
         self.wifi
             .connect()
-            .map_err(|error| anyhow::anyhow!("Wifi connect error, {}", error))?;
+            .map_err(|_| AppError::WifiConnectFailed)?;
         self.wifi
             .wait_netif_up()
-            .map_err(|error| anyhow::anyhow!("Wifi wait netif up error, {}", error))?;
+            .map_err(|_| AppError::WifiNetifUpFailed)?;
 
         Ok(())
     }
 
-    pub fn fetch_shedule_retried(&mut self, retries: u8) -> anyhow::Result<String> {
+    pub fn fetch_shedule_retried(&mut self, retries: u8) -> Result<String, AppError> {
         let mut attempt = 0;
         loop {
             match self.fetch_schedule() {
@@ -102,7 +98,7 @@ impl WifiClient {
         }
     }
 
-    pub fn fetch_schedule(&mut self) -> anyhow::Result<String> {
+    pub fn fetch_schedule(&mut self) -> Result<String, AppError> {
         self.connect()?;
         let http_config = Configuration {
             buffer_size: Some(READ_CHUNK_SIZE),
@@ -110,22 +106,24 @@ impl WifiClient {
             ..Default::default()
         };
 
-        let connection = EspHttpConnection::new(&http_config)?;
+        let connection =
+            EspHttpConnection::new(&http_config).map_err(|_| AppError::HttpConnectionFailed)?;
         let mut client = HttpClient::wrap(connection);
 
         let headers = [("accept", "application/json")];
-        let request = client.request(Method::Get, CONFIG.server_url, &headers)?;
-        let mut response = request.submit()?;
+        let request = client
+            .request(Method::Get, CONFIG.server_url, &headers)
+            .map_err(|_| AppError::HttpRequestCreationFailed)?;
+        let mut response = request
+            .submit()
+            .map_err(|_| AppError::HttpRequestSubmitFailed)?;
 
         let status = response.status();
         match status {
             200..=299 => info!("Request successful with status {}", status),
             _ => {
                 error!("Request failed with status code: {}", status);
-                return Err(anyhow::anyhow!(
-                    "Request failed with status code: {}",
-                    status
-                ));
+                return Err(AppError::HttpUnexpectedStatus(status));
             }
         }
 
@@ -137,14 +135,16 @@ impl WifiClient {
         let mut chunk = [0u8; READ_CHUNK_SIZE];
 
         loop {
-            let n = response.read(&mut chunk)?;
+            let n = response
+                .read(&mut chunk)
+                .map_err(|_| AppError::HttpResponseReadFailed)?;
             if n == 0 {
                 // End of body
                 break;
             }
 
             if total_len + n > MAX_BODY_LEN_BYTES {
-                return Err(anyhow::anyhow!("HTTP Response body too large"));
+                return Err(AppError::HttpResponseTooLarge);
             }
 
             // Copy chunk into the big buffer
@@ -154,7 +154,7 @@ impl WifiClient {
 
         // Convert the used slice into &str then to owned String
         let body_str = std::str::from_utf8(&body_buf[..total_len])
-            .map_err(|e| anyhow::anyhow!("Failed to decode response body as UTF-8"))?
+            .map_err(|_| AppError::HttpResponseInvalidUtf8)?
             .to_owned();
 
         // Be careful logging the whole 35KB body; this can be slow over UART.
@@ -164,7 +164,7 @@ impl WifiClient {
         Ok(body_str)
     }
 
-    pub fn post_error(&mut self, message: &str) -> anyhow::Result<()> {
+    pub fn post_error(&mut self, message: &str) -> Result<(), AppError> {
         self.connect()?;
 
         let url = format!("{}/error", CONFIG.server_url.trim_end_matches('/'));
@@ -172,31 +172,36 @@ impl WifiClient {
             "mac": CONFIG.device_mac,
             "message": message,
         });
-        let body = serde_json::to_string(&payload)?;
+        let body =
+            serde_json::to_string(&payload).map_err(|_| AppError::JsonSerializationFailed)?;
 
         let http_config = Configuration {
             timeout: Some(Duration::from_secs(15)),
             ..Default::default()
         };
 
-        let connection = EspHttpConnection::new(&http_config)?;
+        let connection =
+            EspHttpConnection::new(&http_config).map_err(|_| AppError::HttpConnectionFailed)?;
         let mut client = HttpClient::wrap(connection);
         let headers = [("content-type", "application/json")];
 
-        let mut request = client.request(Method::Post, &url, &headers)?;
-        request.write(body.as_bytes())?;
+        let mut request = client
+            .request(Method::Post, &url, &headers)
+            .map_err(|_| AppError::HttpRequestCreationFailed)?;
+        request
+            .write(body.as_bytes())
+            .map_err(|_| AppError::HttpRequestSubmitFailed)?;
 
-        let response = request.submit()?;
+        let response = request
+            .submit()
+            .map_err(|_| AppError::HttpRequestSubmitFailed)?;
         let status = response.status();
 
         match status {
             200..=299 => info!("Error posted successfully (status {})", status),
             _ => {
                 error!("Error post failed with status code: {}", status);
-                return Err(anyhow::anyhow!(
-                    "Error post failed with status code: {}",
-                    status
-                ));
+                return Err(AppError::HttpUnexpectedStatus(status));
             }
         }
 

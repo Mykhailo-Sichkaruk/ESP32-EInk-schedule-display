@@ -30,5 +30,3 @@ pub struct ResponseWidgetScheduleEvent {
     #[serde(with = "chrono::naive::serde::ts_milliseconds")]
     pub end_unix: NaiveDateTime,
 }
-
-pub type ScheduleParseError = anyhow::Error;
