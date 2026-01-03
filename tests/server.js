@@ -49,15 +49,14 @@ function gen(num, now) {
 }
 
 const getResult = () => {
-  // const now = 1766179737817;
-  const now = 1767041427334;
+  const now = 1767474242656;
   return {
     widgets: {
       schedule: {
         events: gen(75, now),
       }
     },
-    sysstem: {
+    system: {
       server_time_unix: Date.now(),
     },
   };
@@ -83,7 +82,7 @@ const requestListener = async (req, res) => {
     res.writeHead(200, { "Content-Type": "application/json" });
     const result = getResult();
     res.end(JSON.stringify(result));
-    console.log(result);
+    console.dir(result.widgets.schedule.events);
   }
 };
 
@@ -100,3 +99,4 @@ const PORT = 8080;
 http.createServer(requestListener).listen(PORT, "0.0.0.0", () => {
   console.log(`Server is running on http://0.0.0.0:${PORT}`);
 });
+
