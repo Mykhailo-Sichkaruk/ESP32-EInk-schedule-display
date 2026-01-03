@@ -4,42 +4,31 @@ use embedded_graphics::prelude::{Dimensions, Point, Size};
 use embedded_graphics::primitives::PrimitiveStyleBuilder;
 use embedded_graphics_components::error_banner::ErrorBanner;
 use embedded_graphics_components::schedule_table_style::{Palette, ScheduleTableStyleBuilder};
-#[cfg(not(feature = "wokwi"))]
+use embedded_graphics_components::time_interval::TimeInterval;
 use epd_waveshare::color::TriColor;
 use epd_waveshare::prelude::WaveshareDisplay;
 
 use embedded_graphics_components::schedule_table::ScheduleTable;
-use esp_idf_hal::gpio::PinDriver;
 use esp_idf_hal::delay::Delay;
+use esp_idf_hal::gpio::PinDriver;
 use esp_idf_hal::gpio::{self};
 use esp_idf_hal::prelude::*;
 use esp_idf_hal::spi;
 use log::info;
 
-#[cfg(feature = "wokwi")]
-use epd_waveshare::color::Color as DuoColor;
-#[cfg(feature = "wokwi")]
-use epd_waveshare::epd2in9_v2::{Display2in9 as Display, Epd2in9 as Epd};
-#[cfg(not(feature = "wokwi"))]
 use epd_waveshare::epd7in5b_v3::{Display7in5 as Display, Epd7in5 as Epd};
 
-#[cfg(not(feature = "wokwi"))]
 const HOURS_TO_SHOW: u32 = 12;
-#[cfg(feature = "wokwi")]
-const HOURS_TO_SHOW: u32 = 5;
 
 const ERROR_LINES: i32 = 2;
 const ERROR_PADDING: i32 = 4;
 const ERROR_HELP_TEXT: &str = "Please contact Ynet members";
 
 use crate::esp_resource::EpdHardwarePins;
-use crate::schedule_api::ParsedSchedule;
+use crate::schedule_api::Response;
 
-pub fn render_schedule(epd_pins: EpdHardwarePins, schedule: ParsedSchedule) -> anyhow::Result<()> {
-    #[cfg(not(feature = "wokwi"))]
+pub fn render_schedule(epd_pins: EpdHardwarePins, response: Response) -> anyhow::Result<()> {
     let palette = Palette::new(TriColor::Black, TriColor::White, TriColor::Chromatic);
-    #[cfg(feature = "wokwi")]
-    let palette = Palette::new(DuoColor::Black, DuoColor::White, DuoColor::Black);
 
     let EpdHardwarePins {
         spi,
@@ -64,7 +53,6 @@ pub fn render_schedule(epd_pins: EpdHardwarePins, schedule: ParsedSchedule) -> a
     )?;
     let mut delay = Delay::new(100);
 
-
     let mut epd = Epd::new(
         &mut spidd,
         PinDriver::input(busy_in)?,
@@ -82,8 +70,15 @@ pub fn render_schedule(epd_pins: EpdHardwarePins, schedule: ParsedSchedule) -> a
     let display_width = display.bounding_box().size.width;
     let display_height = display.bounding_box().size.height;
 
-    let time_intervals = schedule.time_intervals();
-    let current_time = schedule.current_time;
+    let time_intervals = response
+        .widgets
+        .schedule
+        .events
+        .iter()
+        .map(|event| TimeInterval::new(event.start_unix, event.end_unix, &event.label))
+        .collect::<Result<Vec<TimeInterval>, _>>()?;
+
+    let current_time = response.system.server_time_unix;
 
     ScheduleTable::new(
         Point::new(0, 0),
@@ -103,10 +98,7 @@ pub fn render_schedule(epd_pins: EpdHardwarePins, schedule: ParsedSchedule) -> a
 }
 
 pub fn render_error(epd_pins: EpdHardwarePins, message: &str) -> anyhow::Result<()> {
-    #[cfg(not(feature = "wokwi"))]
     let palette = Palette::new(TriColor::Black, TriColor::White, TriColor::Chromatic);
-    #[cfg(feature = "wokwi")]
-    let palette = Palette::new(DuoColor::Black, DuoColor::White, DuoColor::Black);
 
     let EpdHardwarePins {
         spi,
@@ -157,8 +149,8 @@ pub fn render_error(epd_pins: EpdHardwarePins, message: &str) -> anyhow::Result<
     let banner_top_left = Point::new(0, display_height as i32 - banner_height as i32);
     let banner_size = Size::new(display_width, banner_height);
 
-    let max_chars = (banner_size.width as usize)
-        .saturating_div(text_style.font.character_size.width as usize);
+    let max_chars =
+        (banner_size.width as usize).saturating_div(text_style.font.character_size.width as usize);
     let line1 = truncate_line(message, max_chars);
     let line2 = truncate_line(ERROR_HELP_TEXT, max_chars);
 

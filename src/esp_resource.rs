@@ -1,8 +1,13 @@
 use esp_idf_hal::{
-    gpio::{AnyInputPin, AnyOutputPin}, modem::Modem, peripherals::Peripherals, spi::SPI3
+    gpio::{AnyInputPin, AnyOutputPin},
+    modem::Modem,
+    peripherals::Peripherals,
+    spi::SPI3,
 };
-use log::info;
-use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::{EspDefaultNvsPartition, EspNvsPartition, NvsDefault}};
+use esp_idf_svc::{
+    eventloop::EspSystemEventLoop,
+    nvs::{EspDefaultNvsPartition, EspNvsPartition, NvsDefault},
+};
 
 pub struct EpdHardwarePins {
     pub spi: SPI3,
@@ -20,31 +25,19 @@ pub struct NetParts {
     pub sysloop: EspSystemEventLoop,
 }
 
-pub fn get() -> anyhow::Result<(EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>)> {
-    let peripherals = Peripherals::take()?;
+pub fn get() -> Result<(EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>), anyhow::Error> {
+    let peripherals = Peripherals::take().expect("Failed to take peripherals");
 
     let modem = peripherals.modem;
-    let sysloop = EspSystemEventLoop::take()?;
+    let sysloop = EspSystemEventLoop::take().expect("Failed to take system event loop");
     let sclk: AnyOutputPin = peripherals.pins.gpio18.into();
     let cs: AnyOutputPin = peripherals.pins.gpio5.into();
     let busy_in: AnyInputPin = peripherals.pins.gpio4.into();
     let pwr: AnyOutputPin = peripherals.pins.gpio2.into();
 
-    let (mosi, rst, dc) = if cfg!(feature = "wokwi") {
-        info!("EPD_CONFIG: Using Wokwi pinout for EPD.");
-        (
-            peripherals.pins.gpio19.into(), // Wokwi MOSI
-            peripherals.pins.gpio21.into(), // Wokwi RST
-            peripherals.pins.gpio23.into(), // Wokwi DC
-        )
-    } else {
-        info!("EPD_CONFIG: Using Physical hardware pinout for EPD.");
-        (
-            peripherals.pins.gpio23.into(), // Physical MOSI
-            peripherals.pins.gpio16.into(), // Physical RST
-            peripherals.pins.gpio17.into(), // Physical DC
-        )
-    };
+    let mosi = peripherals.pins.gpio23.into(); // Physical MOSI
+    let rst = peripherals.pins.gpio16.into(); // Physical RST
+    let dc = peripherals.pins.gpio17.into(); // Physical DC
 
     let epd = EpdHardwarePins {
         spi: peripherals.spi3,
@@ -56,12 +49,10 @@ pub fn get() -> anyhow::Result<(EpdHardwarePins, NetParts, EspNvsPartition<NvsDe
         dc,
         pwr,
     };
-    let net_parts = NetParts {
-        modem,
-        sysloop,
-    };
+    let net_parts = NetParts { modem, sysloop };
 
-    let nvs = EspDefaultNvsPartition::take()?;
+    let nvs = EspDefaultNvsPartition::take().expect("Failed to take default NVS partition");
 
+    // (epd, net_parts, nvs)
     Ok((epd, net_parts, nvs))
 }

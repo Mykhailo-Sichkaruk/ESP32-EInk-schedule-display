@@ -3,8 +3,9 @@ use embedded_graphics::{
     prelude::{Dimensions, Point, Size},
 };
 use embedded_graphics_components::{
-    schedule_table::{ScheduleTable, TimeInterval},
+    schedule_table::ScheduleTable,
     schedule_table_style::{Palette, ScheduleTableStyleBuilder},
+    time_interval::TimeInterval,
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 
@@ -22,12 +23,12 @@ fn main() -> anyhow::Result<()> {
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(12, 15, 0).unwrap()),
             "xsichkaruk",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(12, 30, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()),
             "xchaban",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(
                 tomorrow,
@@ -38,7 +39,7 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(10, 45, 0).unwrap(),
             ),
             "xchaban",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(
                 tomorrow,
@@ -49,7 +50,7 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(13, 15, 0).unwrap(),
             ),
             "xtodorov",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(
                 tomorrow,
@@ -60,7 +61,7 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
             ),
             "xchaban",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(
                 day_after_tomorrow,
@@ -71,7 +72,7 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
             ),
             "xchaban",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(
                 day_after_tomorrow,
@@ -82,7 +83,7 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(14, 30, 0).unwrap(),
             ),
             "xchaban",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(
                 day_after_tomorrow,
@@ -93,17 +94,21 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(16, 0, 0).unwrap(),
             ),
             "xchaban",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(17, 0, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(17, 15, 0).unwrap()),
             "xchaban",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(22, 15, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(23, 59, 59).unwrap()),
+            // chrono::NaiveDateTime::new(
+            //     tomorrow,
+            //     chrono::NaiveTime::from_hms_opt(23, 10, 59).unwrap(),
+            // ),
             "xchaban",
-        ),
+        )?,
     ];
 
     let style = ScheduleTableStyleBuilder::new(Palette::new(

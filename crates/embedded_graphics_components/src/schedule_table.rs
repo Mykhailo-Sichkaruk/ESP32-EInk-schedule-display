@@ -4,32 +4,24 @@ use embedded_graphics::primitives::{Line, Rectangle, RoundedRectangle};
 use embedded_graphics::text::renderer::TextRenderer;
 use embedded_graphics::text::{Alignment, Baseline, Text, TextStyleBuilder};
 
-use crate::errors::{InvalidInterval, ScheduleTableError};
+use crate::errors::ScheduleTableError;
 use crate::schedule_table_style::ScheduleTableStyle;
-
-#[derive(Debug, Clone)]
-pub struct TimeInterval<'a> {
-    start: chrono::NaiveDateTime,
-    end: chrono::NaiveDateTime,
-    label: &'a str,
-}
-
-impl<'a> TimeInterval<'a> {
-    pub fn new(start: chrono::NaiveDateTime, end: chrono::NaiveDateTime, label: &'a str) -> Self {
-        TimeInterval { start, end, label }
-    }
-}
+use crate::time_interval::{IntervalSplitter, TimeInterval};
 
 pub struct ScheduleTable<'a, C>
 where
     C: PixelColor,
 {
+    // Top left position from which to draw the table
     top_left: Point,
+    // Size of the table
     size: Size,
+    // Current time to highlight with red line
     current_time: NaiveDateTime,
     date_range: Vec<NaiveDate>,
     time_intervals: &'a [TimeInterval<'a>],
-    hours_to_show: i32, // FIXME: remove
+    hours_to_show: i32,
+    // days_to_show: i32,
     time_window_start: NaiveTime,
 
     // styles
@@ -52,26 +44,18 @@ where
         hours_to_show: u32,
     ) -> Result<Self, ScheduleTableError> {
         let hours_to_show = hours_to_show as i32;
-        let (first_date, last_date) = time_intervals
+
+        let first_date = time_intervals
             .iter()
-            .filter(|i| i.start.date() >= current_time.date())
-            .try_fold((None, None), |(first, last), interval| {
-                let start = interval.start.date();
-                let end = interval.end.date();
-                Ok((
-                    Some(first.map_or(start, |f: NaiveDate| f.min(start))),
-                    Some(last.map_or(end, |l: NaiveDate| l.max(end))),
-                ))
-            })
-            .and_then(|(first, last)| {
-                let first = first.ok_or(ScheduleTableError::InvalidInterval(
-                    InvalidInterval::FirstDateNotFound,
-                ))?;
-                let last = last.ok_or(ScheduleTableError::InvalidInterval(
-                    InvalidInterval::LastDateNotFound,
-                ))?;
-                Ok((first, last))
-            })?;
+            .map(|i| i.start.date().min(i.end.date()))
+            .min()
+            .unwrap();
+
+        let last_date = time_intervals
+            .iter()
+            .map(|i| i.start.date().max(i.end.date()))
+            .max()
+            .unwrap();
 
         let half_window_hours = hours_to_show / 2;
         let current_hour = current_time.hour() as i32;
@@ -121,7 +105,7 @@ where
         let component_bottom = component_height + self.top_left.y;
 
         let header_height = self.style.text_body.font.character_size.height as i32 * 2; // two lines for header
-        let time_col_width = self.style.text_body.font.character_size.width as i32 * 6; // width for time column (e.g., "HH:MM")
+        let time_col_width = self.style.text_body.font.character_size.width as i32 * 6; // width for time column (e.g., "HH:MM" = 5 chars + padding)
         let date_col_width = (component_width - time_col_width) / days_count;
         let row_height = (component_height - header_height) / self.hours_to_show;
 
@@ -240,6 +224,7 @@ where
         for interval in self
             .time_intervals
             .iter()
+            .flat_map(|i| IntervalSplitter::new(i))
             .filter(|i| i.start.date() >= self.current_time.date())
         {
             let col_index = if let Some(index) = self

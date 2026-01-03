@@ -6,8 +6,9 @@ use esp_idf_svc::wifi::{
     AuthMethod, BlockingWifi, ClientConfiguration, Configuration as WifiConfiguration, EspWifi,
 };
 use log::{error, info};
-use std::time::Duration; // or core::time::Duration if you’re no_std + alloc
+use std::time::Duration;
 
+use crate::app_error::AppError;
 use crate::esp_resource::NetParts;
 
 #[toml_cfg::toml_config]
@@ -22,9 +23,7 @@ pub struct Config {
     device_mac: &'static str,
 }
 
-// 35 KB max response body
 const MAX_BODY_LEN_BYTES: usize = 35 * 1024;
-// Chunk size for each read from the socket
 const READ_CHUNK_SIZE: usize = 1024;
 
 pub struct WifiClient {
@@ -35,8 +34,14 @@ impl WifiClient {
     pub fn new(
         NetParts { modem, sysloop }: NetParts,
         nvs: EspDefaultNvsPartition,
-    ) -> anyhow::Result<Self> {
-        let wifi = BlockingWifi::wrap(EspWifi::new(modem, sysloop.clone(), Some(nvs))?, sysloop)?;
+    ) -> Result<Self, anyhow::Error> {
+        let wifi = BlockingWifi::wrap(
+            EspWifi::new(modem, sysloop.clone(), Some(nvs))
+                .map_err(|error| AppError::WifiInit(anyhow::anyhow!(error.to_string())))?,
+            sysloop,
+        )
+        .map_err(|error| AppError::WifiInit(anyhow::anyhow!(error.to_string())))?;
+
         Ok(Self { wifi })
     }
 
@@ -60,12 +65,19 @@ impl WifiClient {
                 ..Default::default()
             });
 
-        self.wifi.set_configuration(&wifi_configuration)?;
-        self.wifi.start()?;
-        self.wifi.connect()?;
-        self.wifi.wait_netif_up()?;
+        self.wifi
+            .set_configuration(&wifi_configuration)
+            .map_err(|error| anyhow::anyhow!("Wifi configuration error, {}", error))?;
+        self.wifi
+            .start()
+            .map_err(|error| anyhow::anyhow!("Wifi start error, {}", error))?;
+        self.wifi
+            .connect()
+            .map_err(|error| anyhow::anyhow!("Wifi connect error, {}", error))?;
+        self.wifi
+            .wait_netif_up()
+            .map_err(|error| anyhow::anyhow!("Wifi wait netif up error, {}", error))?;
 
-        info!("Wifi connected");
         Ok(())
     }
 
@@ -77,10 +89,7 @@ impl WifiClient {
                 Err(e) => {
                     attempt += 1;
                     if attempt > retries {
-                        error!(
-                            "fetch_schedule failed after {} attempts: {:?}",
-                            attempt, e
-                        );
+                        error!("fetch_schedule failed after {} attempts: {:?}", attempt, e);
                         return Err(e);
                     } else {
                         error!(
@@ -95,11 +104,9 @@ impl WifiClient {
 
     pub fn fetch_schedule(&mut self) -> anyhow::Result<String> {
         self.connect()?;
-
-        // Increase HTTP timeout and set reasonable RX buffer size
         let http_config = Configuration {
             buffer_size: Some(READ_CHUNK_SIZE),
-            timeout: Some(Duration::from_secs(30)), // bump this if your link/server is slow
+            timeout: Some(Duration::from_secs(30)),
             ..Default::default()
         };
 
@@ -137,12 +144,6 @@ impl WifiClient {
             }
 
             if total_len + n > MAX_BODY_LEN_BYTES {
-                error!(
-                    "Response body too large: {} + {} > {}",
-                    total_len,
-                    n,
-                    MAX_BODY_LEN_BYTES
-                );
                 return Err(anyhow::anyhow!("HTTP Response body too large"));
             }
 
@@ -151,24 +152,14 @@ impl WifiClient {
             total_len += n;
         }
 
-        info!("Read {} bytes in HTTP response body", total_len);
-
         // Convert the used slice into &str then to owned String
         let body_str = std::str::from_utf8(&body_buf[..total_len])
-            .map_err(|e| {
-                error!("Failed to decode response body as UTF-8: {:?}", e);
-                anyhow::anyhow!("Failed to decode response body as UTF-8")
-            })?
+            .map_err(|e| anyhow::anyhow!("Failed to decode response body as UTF-8"))?
             .to_owned();
 
         // Be careful logging the whole 35KB body; this can be slow over UART.
         // You might truncate it for logs:
         let log_preview_len = body_str.len().min(256);
-        info!(
-            "Response body (first {} bytes): {:?}",
-            log_preview_len,
-            &body_str[..log_preview_len]
-        );
 
         Ok(body_str)
     }
@@ -212,4 +203,3 @@ impl WifiClient {
         Ok(())
     }
 }
-

@@ -6,8 +6,9 @@ use embedded_graphics::{
 };
 use embedded_graphics_components::{
     error_banner::ErrorBanner,
-    schedule_table::{ScheduleTable, TimeInterval},
+    schedule_table::ScheduleTable,
     schedule_table_style::{Palette, ScheduleTableStyleBuilder},
+    time_interval::TimeInterval,
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 
@@ -24,23 +25,27 @@ fn main() -> anyhow::Result<()> {
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(11, 0, 0).unwrap()),
             "Standup",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(16, 0, 0).unwrap()),
             "Review",
-        ),
+        )?,
         TimeInterval::new(
-            chrono::NaiveDateTime::new(tomorrow, chrono::NaiveTime::from_hms_opt(10, 0, 0).unwrap()),
-            chrono::NaiveDateTime::new(tomorrow, chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap()),
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(10, 0, 0).unwrap(),
+            ),
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap(),
+            ),
             "Planning",
-        ),
+        )?,
     ];
 
-    let current_time = chrono::NaiveDateTime::new(
-        today,
-        chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap()
-    );
+    let current_time =
+        chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(12, 0, 0).unwrap());
 
     // Draw schedule in top half
     let schedule_height = display_height / 2 - 20;

@@ -4,6 +4,7 @@ use core::fmt;
 pub enum InvalidInterval {
     FirstDateNotFound,
     LastDateNotFound,
+    EndBeforeStart,
 }
 
 impl InvalidInterval {
@@ -11,6 +12,7 @@ impl InvalidInterval {
         match self {
             InvalidInterval::FirstDateNotFound => "First date not found",
             InvalidInterval::LastDateNotFound => "Last date not found",
+            InvalidInterval::EndBeforeStart => "End time is before start time",
         }
     }
 }

@@ -1,5 +1,10 @@
 use esp_backtrace as _;
-use esp_eink_schedule::{app_error::AppError, esp_resource, render, schedule_api, wifilib};
+use esp_eink_schedule::{
+    app_error::AppError,
+    esp_resource, render,
+    schedule_api::{self, Response},
+    wifilib,
+};
 use log::{error, info, warn};
 
 #[toml_cfg::toml_config]
@@ -23,7 +28,10 @@ fn main() -> anyhow::Result<()> {
         handle_error(&mut ctx, &err);
     }
 
-    info!("Going to deep sleep for {0} seconds...", CONFIG.sleep_time_secs);
+    info!(
+        "Going to deep sleep for {0} seconds...",
+        CONFIG.sleep_time_secs
+    );
     unsafe {
         esp_idf_sys::esp_sleep_enable_timer_wakeup(CONFIG.sleep_time_secs * 1_000_000);
         esp_idf_sys::esp_deep_sleep_start();
@@ -49,13 +57,16 @@ fn run_cycle(ctx: &mut AppContext) -> Result<(), AppError> {
         .ok_or_else(|| AppError::WifiConnect(anyhow::anyhow!("wifi not initialized")))?
         .fetch_schedule()
         .map_err(AppError::FetchSchedule)?;
-    let schedule = schedule_api::parse_schedule(&schedule_json).map_err(AppError::ParseSchedule)?;
+    // let schedule = schedule_api::parse_schedule(&schedule_json).map_err(AppError::ParseSchedule)?;
+    let response: Response = serde_json::from_str(&schedule_json)
+        .map_err(anyhow::Error::from)
+        .map_err(AppError::ParseSchedule)?;
 
     let epd_pins = ctx
         .epd_pins
         .take()
         .ok_or_else(|| AppError::Render(anyhow::anyhow!("epd pins not initialized")))?;
-    render::render_schedule(epd_pins, schedule).map_err(AppError::Render)?;
+    render::render_schedule(epd_pins, response).map_err(AppError::Render)?;
 
     Ok(())
 }

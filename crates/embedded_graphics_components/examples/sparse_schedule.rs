@@ -3,8 +3,9 @@ use embedded_graphics::{
     prelude::{Dimensions, Point, Size},
 };
 use embedded_graphics_components::{
-    schedule_table::{ScheduleTable, TimeInterval},
+    schedule_table::ScheduleTable,
     schedule_table_style::{Palette, ScheduleTableStyleBuilder},
+    time_interval::TimeInterval,
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 
@@ -22,18 +23,22 @@ fn main() -> anyhow::Result<()> {
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(9, 0, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(10, 0, 0).unwrap()),
             "Quick Standup",
-        ),
+        )?,
         TimeInterval::new(
-            chrono::NaiveDateTime::new(tomorrow, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()),
-            chrono::NaiveDateTime::new(tomorrow, chrono::NaiveTime::from_hms_opt(15, 30, 0).unwrap()),
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap(),
+            ),
+            chrono::NaiveDateTime::new(
+                tomorrow,
+                chrono::NaiveTime::from_hms_opt(15, 30, 0).unwrap(),
+            ),
             "1-on-1 Meeting",
-        ),
+        )?,
     ];
 
-    let current_time = chrono::NaiveDateTime::new(
-        today,
-        chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap()
-    );
+    let current_time =
+        chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(8, 0, 0).unwrap());
 
     ScheduleTable::new(
         Point::new(40, 40),

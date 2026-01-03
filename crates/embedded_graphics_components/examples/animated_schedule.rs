@@ -4,8 +4,9 @@ use embedded_graphics::{
     prelude::{Dimensions, Point, Size},
 };
 use embedded_graphics_components::{
-    schedule_table::{ScheduleTable, TimeInterval},
+    schedule_table::ScheduleTable,
     schedule_table_style::{Palette, ScheduleTableStyleBuilder},
+    time_interval::TimeInterval,
 };
 use embedded_graphics_simulator::{OutputSettingsBuilder, SimulatorDisplay, Window};
 use std::thread;
@@ -24,12 +25,12 @@ fn main() -> anyhow::Result<()> {
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(6, 0, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(12, 15, 0).unwrap()),
             "Morning Meeting",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(14, 0, 0).unwrap()),
             chrono::NaiveDateTime::new(today, chrono::NaiveTime::from_hms_opt(16, 0, 0).unwrap()),
             "Team Sync",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(
                 tomorrow,
@@ -40,7 +41,7 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(11, 30, 0).unwrap(),
             ),
             "Review",
-        ),
+        )?,
         TimeInterval::new(
             chrono::NaiveDateTime::new(
                 tomorrow,
@@ -51,7 +52,7 @@ fn main() -> anyhow::Result<()> {
                 chrono::NaiveTime::from_hms_opt(15, 0, 0).unwrap(),
             ),
             "Workshop",
-        ),
+        )?,
     ];
 
     let output_settings = OutputSettingsBuilder::new().scale(1).build();
