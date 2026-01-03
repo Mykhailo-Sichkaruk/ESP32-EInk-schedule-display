@@ -95,10 +95,7 @@ fn parse_epoch(value: i64, field: &'static str) -> Result<NaiveDateTime, Schedul
         (value, 0)
     };
 
-    NaiveDateTime::from_timestamp_opt(secs, nanos).ok_or(
-        ScheduleParseError::InvalidTimestamp {
-            field,
-            value,
-        },
-    )
+    chrono::DateTime::<chrono::Utc>::from_timestamp(secs, nanos)
+        .map(|dt| dt.naive_utc())
+        .ok_or(ScheduleParseError::InvalidTimestamp { field, value })
 }

@@ -1,0 +1,6 @@
+[esp-eink-schedule]
+wifi_ssid = "Mi 9 SE"
+wifi_psk = "14881488"
+server_url = "http://10.205.69.77:8080"
+device_mac = "00:00:00:00:00:00"
+sleep_time_secs = 30

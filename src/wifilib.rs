@@ -2,12 +2,11 @@ use embedded_svc::http::client::Client as HttpClient;
 use esp_idf_svc::http::client::{Configuration, EspHttpConnection};
 use esp_idf_svc::http::Method;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
-use esp_idf_svc::{
-    wifi::{
-        AuthMethod, BlockingWifi, ClientConfiguration, Configuration as WifiConfiguration, EspWifi,
-    },
+use esp_idf_svc::wifi::{
+    AuthMethod, BlockingWifi, ClientConfiguration, Configuration as WifiConfiguration, EspWifi,
 };
 use log::{error, info};
+use std::time::Duration; // or core::time::Duration if you’re no_std + alloc
 
 use crate::esp_resource::NetParts;
 
@@ -19,68 +18,198 @@ pub struct Config {
     wifi_psk: &'static str,
     #[default("")]
     server_url: &'static str,
+    #[default("")]
+    device_mac: &'static str,
 }
 
-pub fn connect_wifi(NetParts { modem, sysloop }: NetParts, nvs: EspDefaultNvsPartition) -> anyhow::Result<()> {
-    let mut wifi = BlockingWifi::wrap(
-        EspWifi::new(modem, sysloop.clone(), Some(nvs))?,
-        sysloop,
-    )?;
+// 35 KB max response body
+const MAX_BODY_LEN_BYTES: usize = 35 * 1024;
+// Chunk size for each read from the socket
+const READ_CHUNK_SIZE: usize = 1024;
 
-    let wifi_configuration: WifiConfiguration = WifiConfiguration::Client(ClientConfiguration {
-        ssid: CONFIG.wifi_ssid
-            .try_into()
-            .expect("Could not parse the given SSID into WiFi config"),
-        bssid: None,
-        auth_method: AuthMethod::WPA2Personal,
-        password: CONFIG.wifi_psk
-            .try_into()
-            .expect("Could not parse the given password into WiFi config"),
-        channel: None,
-        ..Default::default()
-    });
-    wifi.set_configuration(&wifi_configuration)?;
-    wifi.start()?;
-    wifi.connect()?;
-    wifi.wait_netif_up()?;
-
-    info!("Wifi connected");
-    Ok(())
+pub struct WifiClient {
+    wifi: BlockingWifi<EspWifi<'static>>,
 }
 
-pub fn fetch_schedule() -> anyhow::Result<String> {
-    let connection = EspHttpConnection::new(&Configuration {
-        use_global_ca_store: true,
-        crt_bundle_attach: Some(esp_idf_svc::sys::esp_crt_bundle_attach),
-        ..Default::default()
-    })?;
-    let mut client = HttpClient::wrap(connection);
-    let headers = [("accept", "application/json")];
-    let request = client.request(Method::Get, CONFIG.server_url, &headers)?;
-    let mut response = request.submit()?;
-    let status = response.status();
-    match status {
-        200..=299 => info!("Request successful"),
-        _ => {
-            error!("Request failed with status code: {}", status);
-            return Err(anyhow::anyhow!("Request failed with status code: {}", status));
+impl WifiClient {
+    pub fn new(
+        NetParts { modem, sysloop }: NetParts,
+        nvs: EspDefaultNvsPartition,
+    ) -> anyhow::Result<Self> {
+        let wifi = BlockingWifi::wrap(EspWifi::new(modem, sysloop.clone(), Some(nvs))?, sysloop)?;
+        Ok(Self { wifi })
+    }
+
+    pub fn connect(&mut self) -> anyhow::Result<()> {
+        let ssid = CONFIG
+            .wifi_ssid
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("invalid wifi_ssid"))?;
+        let password = CONFIG
+            .wifi_psk
+            .try_into()
+            .map_err(|_| anyhow::anyhow!("invalid wifi_psk"))?;
+
+        let wifi_configuration: WifiConfiguration =
+            WifiConfiguration::Client(ClientConfiguration {
+                ssid,
+                bssid: None,
+                auth_method: AuthMethod::WPA2Personal,
+                password,
+                channel: None,
+                ..Default::default()
+            });
+
+        self.wifi.set_configuration(&wifi_configuration)?;
+        self.wifi.start()?;
+        self.wifi.connect()?;
+        self.wifi.wait_netif_up()?;
+
+        info!("Wifi connected");
+        Ok(())
+    }
+
+    pub fn fetch_shedule_retried(&mut self, retries: u8) -> anyhow::Result<String> {
+        let mut attempt = 0;
+        loop {
+            match self.fetch_schedule() {
+                Ok(body) => return Ok(body),
+                Err(e) => {
+                    attempt += 1;
+                    if attempt > retries {
+                        error!(
+                            "fetch_schedule failed after {} attempts: {:?}",
+                            attempt, e
+                        );
+                        return Err(e);
+                    } else {
+                        error!(
+                            "fetch_schedule attempt {} failed: {:?}. Retrying...",
+                            attempt, e
+                        );
+                    }
+                }
+            }
         }
     }
-    let mut bytes = [0; 1024]; // Buffer size of 1024 bytes
-    let read_bytes = response.read(&mut bytes)?;
-    info!("Read {} bytes", bytes.len());
-    let body = String::from_utf8(bytes[0..read_bytes].to_vec());
-    info!("Response body: {:?}", body);
 
-    if body.is_err() {
-        error!("Failed to read response body: {:?}", body);
-        return Err(anyhow::anyhow!("Failed to read response body"));
+    pub fn fetch_schedule(&mut self) -> anyhow::Result<String> {
+        self.connect()?;
+
+        // Increase HTTP timeout and set reasonable RX buffer size
+        let http_config = Configuration {
+            buffer_size: Some(READ_CHUNK_SIZE),
+            timeout: Some(Duration::from_secs(30)), // bump this if your link/server is slow
+            ..Default::default()
+        };
+
+        let connection = EspHttpConnection::new(&http_config)?;
+        let mut client = HttpClient::wrap(connection);
+
+        let headers = [("accept", "application/json")];
+        let request = client.request(Method::Get, CONFIG.server_url, &headers)?;
+        let mut response = request.submit()?;
+
+        let status = response.status();
+        match status {
+            200..=299 => info!("Request successful with status {}", status),
+            _ => {
+                error!("Request failed with status code: {}", status);
+                return Err(anyhow::anyhow!(
+                    "Request failed with status code: {}",
+                    status
+                ));
+            }
+        }
+
+        // Heap-allocated fixed-size buffer for the whole body
+        let mut body_buf = Box::new([0u8; MAX_BODY_LEN_BYTES]);
+        let mut total_len: usize = 0;
+
+        // Small stack buffer for chunked reads
+        let mut chunk = [0u8; READ_CHUNK_SIZE];
+
+        loop {
+            let n = response.read(&mut chunk)?;
+            if n == 0 {
+                // End of body
+                break;
+            }
+
+            if total_len + n > MAX_BODY_LEN_BYTES {
+                error!(
+                    "Response body too large: {} + {} > {}",
+                    total_len,
+                    n,
+                    MAX_BODY_LEN_BYTES
+                );
+                return Err(anyhow::anyhow!("HTTP Response body too large"));
+            }
+
+            // Copy chunk into the big buffer
+            body_buf[total_len..total_len + n].copy_from_slice(&chunk[..n]);
+            total_len += n;
+        }
+
+        info!("Read {} bytes in HTTP response body", total_len);
+
+        // Convert the used slice into &str then to owned String
+        let body_str = std::str::from_utf8(&body_buf[..total_len])
+            .map_err(|e| {
+                error!("Failed to decode response body as UTF-8: {:?}", e);
+                anyhow::anyhow!("Failed to decode response body as UTF-8")
+            })?
+            .to_owned();
+
+        // Be careful logging the whole 35KB body; this can be slow over UART.
+        // You might truncate it for logs:
+        let log_preview_len = body_str.len().min(256);
+        info!(
+            "Response body (first {} bytes): {:?}",
+            log_preview_len,
+            &body_str[..log_preview_len]
+        );
+
+        Ok(body_str)
     }
 
-    Ok(body?)
+    pub fn post_error(&mut self, message: &str) -> anyhow::Result<()> {
+        self.connect()?;
+
+        let url = format!("{}/error", CONFIG.server_url.trim_end_matches('/'));
+        let payload = serde_json::json!({
+            "mac": CONFIG.device_mac,
+            "message": message,
+        });
+        let body = serde_json::to_string(&payload)?;
+
+        let http_config = Configuration {
+            timeout: Some(Duration::from_secs(15)),
+            ..Default::default()
+        };
+
+        let connection = EspHttpConnection::new(&http_config)?;
+        let mut client = HttpClient::wrap(connection);
+        let headers = [("content-type", "application/json")];
+
+        let mut request = client.request(Method::Post, &url, &headers)?;
+        request.write(body.as_bytes())?;
+
+        let response = request.submit()?;
+        let status = response.status();
+
+        match status {
+            200..=299 => info!("Error posted successfully (status {})", status),
+            _ => {
+                error!("Error post failed with status code: {}", status);
+                return Err(anyhow::anyhow!(
+                    "Error post failed with status code: {}",
+                    status
+                ));
+            }
+        }
+
+        Ok(())
+    }
 }
 
-pub fn post_error() -> anyhow::Result<()> {
-    // Placeholder for posting error back to server
-    Ok(())
-}
