@@ -4,6 +4,7 @@ use esp_idf_svc::http::Method;
 use esp_idf_svc::nvs::EspDefaultNvsPartition;
 use esp_idf_svc::wifi::{
     AuthMethod, BlockingWifi, ClientConfiguration, Configuration as WifiConfiguration, EspWifi,
+    ScanMethod,
 };
 use log::{error, info};
 use std::time::Duration;
@@ -43,6 +44,14 @@ impl WifiClient {
         Ok(Self { wifi })
     }
 
+    pub fn disconnect(&mut self) -> Result<(), AppError> {
+        self.wifi
+            .disconnect()
+            .map_err(|_| AppError::WifiDisconnectFailed)?;
+
+        Ok(())
+    }
+
     pub fn connect(&mut self) -> Result<(), AppError> {
         let ssid = CONFIG
             .wifi_ssid
@@ -60,6 +69,7 @@ impl WifiClient {
                 auth_method: AuthMethod::WPA2Personal,
                 password,
                 channel: None,
+                scan_method: ScanMethod::FastScan,
                 ..Default::default()
             });
 
@@ -156,10 +166,6 @@ impl WifiClient {
         let body_str = std::str::from_utf8(&body_buf[..total_len])
             .map_err(|_| AppError::HttpResponseInvalidUtf8)?
             .to_owned();
-
-        // Be careful logging the whole 35KB body; this can be slow over UART.
-        // You might truncate it for logs:
-        let log_preview_len = body_str.len().min(256);
 
         Ok(body_str)
     }

@@ -1,7 +1,10 @@
 // import https from "node:https";
-// import fs from "node:fs";
+import fs from "node:fs/promises";
 import http from "node:http";
 import { faker } from "@faker-js/faker";
+
+let scheduleCounter = 0;
+let errorCounter = 0;
 
 function addDate({ unixTimeDate, days = 0, hours = 0, minutes = 0 }) {
   let date = new Date(unixTimeDate);
@@ -49,7 +52,7 @@ function gen(num, now) {
 }
 
 const getResult = () => {
-  const now = 1767474242656;
+  const now = Date.now();
   return {
     widgets: {
       schedule: {
@@ -77,12 +80,16 @@ const requestListener = async (req, res) => {
     req.body = JSON.parse(body);
     res.writeHead(200);
     res.end();
+    errorCounter++;
+    console.dir({ errorCounter });
     console.error("ESP Reports error", req.body);
   } else {
     res.writeHead(200, { "Content-Type": "application/json" });
     const result = getResult();
     res.end(JSON.stringify(result));
-    console.dir(result.widgets.schedule.events);
+    scheduleCounter++;
+    console.dir({ scheduleCounter });
+    await fs.writeFile("counter.txt", Buffer.from(String(scheduleCounter)));
   }
 };
 

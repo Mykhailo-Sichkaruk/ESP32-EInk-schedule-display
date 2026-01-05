@@ -44,8 +44,6 @@
 
             export PATH="$HOME/.rustup/toolchains/esp/bin:$PATH"
             . ~/export-esp.sh
-
-            exec fish
           '';
 
         };

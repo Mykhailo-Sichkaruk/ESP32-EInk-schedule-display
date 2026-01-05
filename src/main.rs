@@ -1,9 +1,6 @@
 use esp_backtrace as _;
 use esp_eink_schedule::{
-    app_error::AppError,
-    esp_resource, render,
-    schedule_api::Response,
-    wifilib,
+    app_error::AppError, esp_resource, render, schedule_api::Response, wifilib,
 };
 use log::{error, info, warn};
 
@@ -60,6 +57,11 @@ fn run_cycle(ctx: &mut AppContext) -> Result<(), AppError> {
     let response: Response =
         serde_json::from_str(&schedule_json).map_err(|_| AppError::JsonDeserializationFailed)?;
 
+    ctx.wifi
+        .as_mut()
+        .expect("wifi not initialized")
+        .disconnect()?;
+
     let epd_pins = ctx.epd_pins.take().expect("epd pins not initialized");
     render::render_schedule(epd_pins, response)?;
 
@@ -72,6 +74,9 @@ fn handle_error(ctx: &mut AppContext, err: &AppError) {
     if let Some(wifi) = ctx.wifi.as_mut() {
         if let Err(send_err) = wifi.post_error(&err.to_string()) {
             warn!("Failed to post error: {send_err}");
+        }
+        if let Err(send_err) = wifi.disconnect() {
+            warn!("Failed to disconnect: {send_err}");
         }
     }
 

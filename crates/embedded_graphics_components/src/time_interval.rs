@@ -1,4 +1,4 @@
-use chrono::{Duration, NaiveDateTime};
+use chrono::{NaiveDateTime};
 
 use crate::errors::{InvalidInterval, ScheduleTableError};
 

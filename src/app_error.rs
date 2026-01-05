@@ -18,6 +18,8 @@ pub enum AppError {
     WifiConnectFailed,
     /// Failed to wait for network interface up (wifi.wait_netif_up)
     WifiNetifUpFailed,
+    // Failed to disconnect from wifi
+    WifiDisconnectFailed,
     /// Failed to create HTTP connection (EspHttpConnection::new)
     HttpConnectionFailed,
     /// Failed to create HTTP request (client.request)
@@ -67,6 +69,7 @@ impl fmt::Display for AppError {
             AppError::WifiStartFailed => write!(f, "E_WIFI_5"),
             AppError::WifiConnectFailed => write!(f, "E_WIFI_6"),
             AppError::WifiNetifUpFailed => write!(f, "E_WIFI_7"),
+            AppError::WifiDisconnectFailed => write!(f, "E_WIFI_8"),
             AppError::HttpConnectionFailed => write!(f, "E_HTTP_0"),
             AppError::HttpRequestCreationFailed => write!(f, "E_HTTP_1"),
             AppError::HttpRequestSubmitFailed => write!(f, "E_HTTP_2"),
