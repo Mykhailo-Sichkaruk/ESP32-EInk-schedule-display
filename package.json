@@ -1,6 +1,7 @@
 {
   "type": "module",
   "dependencies": {
-    "@faker-js/faker": "^10.1.0"
+    "@faker-js/faker": "^10.1.0",
+    "ical-expander": "^3.2.0"
   }
 }

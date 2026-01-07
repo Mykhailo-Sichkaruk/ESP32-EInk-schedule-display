@@ -1,10 +1,13 @@
 // import https from "node:https";
 import fs from "node:fs/promises";
 import http from "node:http";
+import IcalExpander from "ical-expander";
 import { faker } from "@faker-js/faker";
 
-let scheduleCounter = 0;
-let errorCounter = 0;
+process.env.TZ = "Europe/Bratislaba";
+
+let scheduleCounter = 2961;
+let errorCounter = 98;
 
 function addDate({ unixTimeDate, days = 0, hours = 0, minutes = 0 }) {
   let date = new Date(unixTimeDate);
@@ -65,8 +68,35 @@ const getResult = () => {
   };
 };
 
+
+const getCal = async (now, days) => {
+  const response = await fetch("https://calendar.google.com/calendar/ical/c_fc7301a05cf616d1de9b9fcd497f83026c333f0f5aaa601f24295d1ddc97e2f1%40group.calendar.google.com/private-9b61d8c6e520d380428debcfd3e5a290/basic.ics");
+  const body = await response.text();
+
+  const cal = new IcalExpander({ ics: body, maxIterations: 1000 });
+  const nowDate = new Date(now);
+  nowDate.setHours(0, 0, 0);
+  const nextDate = new Date(now);
+  nextDate.setDate(nowDate.getDate() + days);
+  nextDate.setHours(23, 59, 59);
+  const calLastEvents = cal.between(nowDate, nextDate);
+
+  const events = calLastEvents.events.map(event => ({ start_unix: event.startDate.toJSDate().getTime(), end_unix: event.endDate.toJSDate().getTime(), label: event.summary ?? "Bez nazvu" }));
+
+  return {
+    widgets: {
+      schedule: {
+        events,
+      }
+    },
+    system: {
+      server_time_unix: Date.now(),
+    },
+  };
+}
+
 const requestListener = async (req, res) => {
-  console.log({ host: req.headers['host'], time: new Date().toISOString() });
+  console.log({ host: req.headers['host'], time: new Date().toString() });
   if (req.url === "/error") {
     const body = await new Promise((resolve) => {
       let data = "";
@@ -84,9 +114,13 @@ const requestListener = async (req, res) => {
     console.dir({ errorCounter });
     console.error("ESP Reports error", req.body);
   } else {
+    const events = await getCal(Date.now(), 2).catch((e) => { 
+      console.error("Error fetching calendar:", e); 
+      return { widgets: { schedule: { events: [] } }, system: { server_time_unix: Date.now() } }; 
+    });
     res.writeHead(200, { "Content-Type": "application/json" });
-    const result = getResult();
-    res.end(JSON.stringify(result));
+    // const result = getResult();
+    res.end(JSON.stringify(events));
     scheduleCounter++;
     console.dir({ scheduleCounter });
     await fs.writeFile("counter.txt", Buffer.from(String(scheduleCounter)));
