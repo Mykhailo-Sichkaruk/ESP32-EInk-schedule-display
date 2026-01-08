@@ -53,7 +53,7 @@ where
     /// Interval box style
     pub interval_box: PrimitiveStyle<C>,
     /// Interval box corner radii
-    pub interval_box_radii: CornerRadii,
+    pub interval_box_corners: CornerRadii,
     /// Interval box margin
     pub interval_box_margin: i32,
     /// Time line style
@@ -62,6 +62,8 @@ where
     pub background: PrimitiveStyle<C>,
     /// Border style for the widget
     pub border: PrimitiveStyle<C>,
+
+    pub(crate) _palette: Palette<C>,
 }
 
 #[derive(Clone, Debug)]
@@ -108,7 +110,7 @@ where
                     .fill_color(palette.secondary)
                     .stroke_width(2)
                     .build(),
-                interval_box_radii: CornerRadiiBuilder::new().all(Size::new(10, 10)).build(),
+                interval_box_corners: CornerRadiiBuilder::new().all(Size::new(10, 10)).build(),
                 interval_box_margin: 4,
                 time_line: PrimitiveStyleBuilder::new()
                     .stroke_color(palette.accent)
@@ -121,6 +123,7 @@ where
                     .stroke_color(palette.primary)
                     .stroke_width(4)
                     .build(),
+                _palette: palette,
             },
         }
     }
@@ -163,7 +166,7 @@ where
     }
 
     pub fn interval_box_radii(mut self, interval_box_radii: CornerRadii) -> Self {
-        self.style.interval_box_radii = interval_box_radii;
+        self.style.interval_box_corners = interval_box_radii;
         self
     }
 

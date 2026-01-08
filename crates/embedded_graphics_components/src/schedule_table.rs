@@ -274,31 +274,67 @@ where
                     Point::new(box_start_x, box_start_y),
                     Size::new(box_width as u32, box_height as u32),
                 ),
-                self.style.interval_box_radii,
+                self.style.interval_box_corners,
             )
             .into_styled(self.style.interval_box)
             .draw(display)?;
 
-            // let max_text_len =
-            //     (date_col_width - self.style.interval_box_margin * 2) / body_font_width;
+            // Wrap and draw interval label text
+            let max_chars_per_line =
+                (box_width / self.style.text_body.font.character_size.width as i32).max(1) as usize
+                    - 1; // 1 char padding
+            let max_text_lines = (box_height / body_font_height).max(0) as usize;
+            let total_chars = max_chars_per_line * max_text_lines;
 
+            // Remove all newlines from original text
+            // TODO: maybe rewrite
+            let clean_label = interval.label.replace('\n', " ");
+            let interval_label = if max_text_lines == 0 {
+                String::new()
+            } else if clean_label.len() <= total_chars {
+                let mut result = String::new();
+                for (i, ch) in clean_label.chars().enumerate() {
+                    if i > 0 && i % max_chars_per_line == 0 {
+                        result.push('\n');
+                    }
+                    result.push(ch);
+                }
+                result
+            } else {
+                let mut result = String::new();
+                for (i, ch) in clean_label
+                    .chars()
+                    .take(total_chars.saturating_sub(3))
+                    .enumerate()
+                {
+                    if i > 0 && i % max_chars_per_line == 0 {
+                        result.push('\n');
+                    }
+                    result.push(ch);
+                }
+                result.push_str("...");
+                result
+            };
+
+            let text_height = self.style.text_body.font.character_size.height as i32
+                * (interval_label.matches('\n').count() as i32 + 1);
             let text_pos = Point::new(
                 col_x + (date_col_width / 2),
-                start_y + (end_y - start_y) / 2,
+                start_y + (end_y - start_y) / 2 - text_height / 2,
             );
             let text_mes =
                 self.style
                     .text_body
-                    .measure_string(interval.label, text_pos, Baseline::Middle);
+                    .measure_string(&interval_label, text_pos, Baseline::Middle);
 
             if (end_y - start_y) >= text_mes.bounding_box.size.height as i32 {
                 Text::with_text_style(
-                    interval.label,
+                    &interval_label,
                     text_pos,
                     self.style.text_body,
                     TextStyleBuilder::new()
                         .alignment(Alignment::Center)
-                        .baseline(Baseline::Middle)
+                        .baseline(Baseline::Top)
                         .build(),
                 )
                 .draw(display)?;
@@ -308,10 +344,15 @@ where
             let end_time_str = interval.end.format("%H:%M").to_string();
             let text_start_x = col_x
                 + self.style.interval_box_margin
-                + self.style.interval_box_radii.top_left.width as i32;
+                + self.style.interval_box_corners.top_left.width as i32;
             let text_end_x = col_x + date_col_width
                 - self.style.interval_box_margin
-                - self.style.interval_box_radii.bottom_right.width as i32;
+                - self.style.interval_box_corners.bottom_right.width as i32;
+
+            // hotfix: skip drawing time texts if there is not enough space
+            if box_height < self.style.text_small.font.character_size.height as i32 / 2 {
+                continue;
+            }
 
             if let Some((style, x_range, y_range)) = &self.style.text_small_shadow {
                 let offsets = x_range
