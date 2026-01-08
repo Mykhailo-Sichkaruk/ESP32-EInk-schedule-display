@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime};
+use chrono::NaiveDateTime;
 
 use crate::errors::{InvalidInterval, ScheduleTableError};
 
@@ -43,7 +43,7 @@ impl<'a> Ord for TimeInterval<'a> {
         self.start
             .cmp(&other.start)
             .then_with(|| self.end.cmp(&other.end))
-            .then_with(|| self.label.cmp(&other.label))
+            .then_with(|| self.label.cmp(other.label))
     }
 }
 

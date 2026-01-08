@@ -9,7 +9,7 @@ use esp_idf_svc::{
     nvs::{EspDefaultNvsPartition, EspNvsPartition, NvsDefault},
 };
 
-pub struct EpdHardwarePins {
+pub struct DisplayPins {
     pub spi: SPI3,
     pub sclk: AnyOutputPin,
     pub mosi: AnyOutputPin,
@@ -25,7 +25,7 @@ pub struct NetParts {
     pub sysloop: EspSystemEventLoop,
 }
 
-pub fn get() -> (EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>) {
+pub fn get() -> (DisplayPins, NetParts, EspNvsPartition<NvsDefault>) {
     let peripherals = Peripherals::take().expect("Failed to take peripherals");
 
     let modem = peripherals.modem;
@@ -35,11 +35,11 @@ pub fn get() -> (EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>) {
     let busy_in: AnyInputPin = peripherals.pins.gpio4.into();
     let pwr: AnyOutputPin = peripherals.pins.gpio2.into();
 
-    let mosi = peripherals.pins.gpio23.into(); // Physical MOSI
-    let rst = peripherals.pins.gpio16.into(); // Physical RST
-    let dc = peripherals.pins.gpio17.into(); // Physical DC
+    let mosi = peripherals.pins.gpio23.into();
+    let rst = peripherals.pins.gpio16.into();
+    let dc = peripherals.pins.gpio17.into();
 
-    let epd = EpdHardwarePins {
+    let display_pins = DisplayPins {
         spi: peripherals.spi3,
         sclk,
         mosi,
@@ -53,5 +53,5 @@ pub fn get() -> (EpdHardwarePins, NetParts, EspNvsPartition<NvsDefault>) {
 
     let nvs = EspDefaultNvsPartition::take().expect("Failed to take default NVS partition");
 
-    (epd, net_parts, nvs)
+    (display_pins, net_parts, nvs)
 }

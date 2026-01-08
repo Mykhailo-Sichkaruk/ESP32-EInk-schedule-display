@@ -1,8 +1,7 @@
 use esp_backtrace as _;
 use esp_eink_schedule::{
-    app_error::AppError, esp_resource, render, schedule_api::Response, wifilib,
+    app_error::AppError, display, hardware, http, parallel, schedule_api, wifi,
 };
-use log::{error, info, warn};
 
 #[toml_cfg::toml_config]
 pub struct Config {
@@ -18,71 +17,57 @@ pub struct Config {
 
 fn main() {
     esp_idf_sys::link_patches();
-    esp_idf_svc::log::EspLogger::initialize_default();
 
-    let mut ctx = AppContext::default();
-    if let Err(err) = run_cycle(&mut ctx) {
-        handle_error(&mut ctx, &err);
-    }
+    let (display_pins, net_parts, nvs) = hardware::get();
 
-    info!(
-        "Going to deep sleep for {0} seconds...",
-        CONFIG.sleep_time_secs
-    );
-    unsafe {
-        esp_idf_sys::esp_sleep_enable_timer_wakeup(CONFIG.sleep_time_secs * 1_000_000);
-        esp_idf_sys::esp_deep_sleep_start();
-    }
+    let _ = run_sequential(display_pins, net_parts, nvs);
+
+    deep_sleep(CONFIG.sleep_time_secs);
 }
 
-#[derive(Default)]
-struct AppContext {
-    wifi: Option<wifilib::WifiClient>,
-    epd_pins: Option<esp_resource::EpdHardwarePins>,
-}
+fn run_sequential(
+    display_pins: hardware::DisplayPins,
+    net_parts: hardware::NetParts,
+    nvs: esp_idf_svc::nvs::EspDefaultNvsPartition,
+) -> Result<(), AppError> {
+    // Step 1: Connect WiFi and fetch schedule
+    let wifi_conn = match wifi::connect(net_parts, nvs) {
+        Ok(conn) => conn,
+        Err(err) => {
+            parallel::handle_error(None, Some(display_pins), &err);
+            return Err(err);
+        }
+    };
 
-fn run_cycle(ctx: &mut AppContext) -> Result<(), AppError> {
-    let (epd_pins, net, nvs) = esp_resource::get();
-    ctx.epd_pins = Some(epd_pins);
+    let schedule_json = match http::fetch_schedule() {
+        Ok(json) => json,
+        Err(err) => {
+            parallel::handle_error(Some(wifi_conn), Some(display_pins), &err);
+            return Err(err);
+        }
+    };
 
-    let wifi = wifilib::WifiClient::new(net, nvs)?;
-    ctx.wifi = Some(wifi);
+    // Step 2: Parse JSON
+    let response = match schedule_api::parse(&schedule_json) {
+        Ok(resp) => resp,
+        Err(err) => {
+            parallel::handle_error(Some(wifi_conn), Some(display_pins), &err);
+            return Err(err);
+        }
+    };
 
-    let schedule_json = ctx
-        .wifi
-        .as_mut()
-        .expect("wifi not initialized")
-        .fetch_schedule()?;
+    // Step 3: Disconnect WiFi
+    let _ = wifi::disconnect(wifi_conn);
 
-    let response: Response =
-        serde_json::from_str(&schedule_json).map_err(|_| AppError::JsonDeserializationFailed)?;
-
-    ctx.wifi
-        .as_mut()
-        .expect("wifi not initialized")
-        .disconnect()?;
-
-    let epd_pins = ctx.epd_pins.take().expect("epd pins not initialized");
-    render::render_schedule(epd_pins, response)?;
+    // Step 4: Render display
+    display::render_schedule(display_pins, response)?;
 
     Ok(())
 }
 
-fn handle_error(ctx: &mut AppContext, err: &AppError) {
-    error!("App error: {err}");
-
-    if let Some(wifi) = ctx.wifi.as_mut() {
-        if let Err(send_err) = wifi.post_error(&err.to_string()) {
-            warn!("Failed to post error: {send_err}");
-        }
-        if let Err(send_err) = wifi.disconnect() {
-            warn!("Failed to disconnect: {send_err}");
-        }
-    }
-
-    if let Some(epd_pins) = ctx.epd_pins.take() {
-        if let Err(render_err) = render::render_error(epd_pins, &err.to_string()) {
-            warn!("Failed to render error: {render_err}");
-        }
+fn deep_sleep(seconds: u64) {
+    unsafe {
+        esp_idf_sys::esp_sleep_enable_timer_wakeup(seconds * 1_000_000);
+        esp_idf_sys::esp_deep_sleep_start();
     }
 }

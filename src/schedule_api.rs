@@ -1,5 +1,8 @@
 use chrono::NaiveDateTime;
 use serde::Deserialize;
+
+use crate::app_error::AppError;
+
 #[derive(Debug, Deserialize)]
 pub struct Response {
     pub widgets: ResponseWidgets,
@@ -29,4 +32,8 @@ pub struct ResponseWidgetScheduleEvent {
     pub start_unix: NaiveDateTime,
     #[serde(with = "chrono::naive::serde::ts_milliseconds")]
     pub end_unix: NaiveDateTime,
+}
+
+pub fn parse(json: &str) -> Result<Response, AppError> {
+    serde_json::from_str(json).map_err(|_| AppError::JsonDeserializationFailed)
 }
