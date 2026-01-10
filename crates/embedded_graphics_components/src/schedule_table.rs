@@ -224,7 +224,7 @@ where
         for interval in self
             .time_intervals
             .iter()
-            .flat_map(|i| IntervalSplitter::new(i))
+            .flat_map(|i| IntervalSplitter::new(i)) // split intervals that span multiple days
             .filter(|i| i.start.date() >= self.current_time.date())
         {
             let col_index = if let Some(index) = self
@@ -243,22 +243,16 @@ where
             let rel_start = interval.start.time() - self.time_window_start;
             let rel_end = interval.end.time() - self.time_window_start;
 
-            let start_y = content_top as f32
+            let start_y = (content_top as f32
                 + (rel_start.num_hours() as f32 * row_height as f32)
-                + (rel_start.num_minutes() as f32 % 60.0 * row_height as f32 / 60.0);
-            let end_y = content_top as f32
+                + (rel_start.num_minutes() as f32 % 60.0 * row_height as f32 / 60.0))
+                as i32;
+            let end_y = (content_top as f32
                 + (rel_end.num_hours() as f32 * row_height as f32)
-                + (rel_end.num_minutes() as f32 % 60.0 * row_height as f32 / 60.0);
-
-            let mut start_y = start_y as i32;
-            let mut end_y = end_y as i32;
-
-            if start_y <= content_top {
-                start_y = content_top;
-            }
-            if end_y >= content_bottom {
-                end_y = content_bottom;
-            }
+                + (rel_end.num_minutes() as f32 % 60.0 * row_height as f32 / 60.0))
+                as i32;
+            let start_y = start_y.max(content_top);
+            let end_y = end_y.min(content_bottom);
 
             if start_y >= end_y {
                 continue; // skip intervals that are not in the visible range
